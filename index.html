@@ -31,9 +31,6 @@ td.slot:hover{outline:2px dashed #2563eb;background:#eff6ff}
 .Guillaume{background:#fed7aa;border-left:5px solid #f97316}
 .Gaël{background:#fecaca;border-left:5px solid #dc2626}
 .badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#e5e7eb;font-size:12px;margin:2px}
-.badge-ok{background:#dcfce7;color:#166534}
-.badge-warn{background:#fef3c7;color:#92400e}
-.badge-danger{background:#fee2e2;color:#991b1b}
 .modal{display:none;position:fixed;inset:0;background:#0008;z-index:99;align-items:center;justify-content:center;padding:12px}
 .modal-content{background:white;border-radius:18px;padding:18px;max-width:850px;width:100%;box-shadow:0 10px 30px #0005;max-height:90vh;overflow:auto}
 .formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
@@ -176,18 +173,28 @@ function remplirDurees(){
 
   for(let h = 0.5; h <= 50; h += 0.5){
     const option = document.createElement("option");
-    option.value = h;
+    option.value = h.toString();
 
-    if(h % 1 === 0){
-      option.textContent = h + " h";
+    if(h === 0.5){
+      option.textContent = "30 min";
+    } else if(h % 1 === 0){
+      option.textContent = h + "h";
     } else {
-      option.textContent = Math.floor(h) + " h 30";
+      option.textContent = Math.floor(h) + "h30";
     }
 
     select.appendChild(option);
   }
 
   select.value = "1";
+}
+
+function formatDuree(valeur){
+  const h = Number(valeur || 0);
+
+  if(h === 0.5) return "30 min";
+  if(h % 1 === 0) return h + "h";
+  return Math.floor(h) + "h30";
 }
 
 function lundiDeLaSemaine(date){
@@ -289,16 +296,6 @@ function afficher(){
     ligne += `</tr>`;
     body.innerHTML += ligne;
   });
-}
-
-function formatDuree(valeur){
-  const h = Number(valeur || 0);
-
-  if(h % 1 === 0){
-    return h + " h";
-  }
-
-  return Math.floor(h) + " h 30";
 }
 
 function ouvrirDepuisCreneau(dateChoisie, heureChoisie){
