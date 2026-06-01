@@ -10,28 +10,32 @@
 <style>
 body{margin:0;font-family:Arial;background:#eef2f7;color:#111827}
 header{background:#111827;color:white;padding:16px;text-align:center}
-.container{padding:12px;max-width:1600px;margin:auto}
+.container{padding:12px;max-width:1700px;margin:auto}
 .card{background:white;border-radius:16px;padding:12px;margin-bottom:12px;box-shadow:0 4px 14px #0002}
 .topbar{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
 button{background:#111827;color:white;border:0;border-radius:10px;padding:10px 14px;font-weight:bold;cursor:pointer}
 button.secondary{background:#2563eb}
+button.green{background:#16a34a}
 button.danger{background:#dc2626}
 .planning{overflow-x:auto}
 table{width:100%;border-collapse:separate;border-spacing:4px}
-th{background:#111827;color:white;border-radius:10px;padding:8px;min-width:170px}
-td{background:#f9fafb;border-radius:8px;vertical-align:top;padding:5px;height:58px;border:1px solid #e5e7eb}
+th{background:#111827;color:white;border-radius:10px;padding:8px;min-width:175px}
+td{background:#f9fafb;border-radius:8px;vertical-align:top;padding:5px;height:62px;border:1px solid #e5e7eb}
 td.slot{cursor:pointer}
 td.slot:hover{outline:2px dashed #2563eb;background:#eff6ff}
 .hour{background:#e5e7eb;font-weight:bold;text-align:center;width:70px;min-width:70px}
-.event{border-radius:10px;padding:8px;font-size:13px;margin-bottom:4px;box-shadow:0 2px 6px #0002;cursor:pointer}
+.event{border-radius:10px;padding:8px;font-size:13px;margin-bottom:5px;box-shadow:0 2px 6px #0002;cursor:pointer}
 .event b{font-size:14px}
 .Maxime{background:#bfdbfe;border-left:5px solid #2563eb}
 .Joël{background:#bbf7d0;border-left:5px solid #16a34a}
 .Guillaume{background:#fed7aa;border-left:5px solid #f97316}
 .Gaël{background:#fecaca;border-left:5px solid #dc2626}
 .badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#e5e7eb;font-size:12px;margin:2px}
+.badge-ok{background:#dcfce7;color:#166534}
+.badge-warn{background:#fef3c7;color:#92400e}
+.badge-danger{background:#fee2e2;color:#991b1b}
 .modal{display:none;position:fixed;inset:0;background:#0008;z-index:99;align-items:center;justify-content:center;padding:12px}
-.modal-content{background:white;border-radius:18px;padding:18px;max-width:720px;width:100%;box-shadow:0 10px 30px #0005}
+.modal-content{background:white;border-radius:18px;padding:18px;max-width:850px;width:100%;box-shadow:0 10px 30px #0005;max-height:90vh;overflow:auto}
 .formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
 input,select,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid #d1d5db;font-size:15px;box-sizing:border-box}
 textarea{min-height:90px}
@@ -39,9 +43,14 @@ textarea{min-height:90px}
 .actions button{flex:1}
 .legend{display:flex;gap:10px;flex-wrap:wrap}
 .dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:5px}
+.courtoisie-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.courtoisie-day{background:#f9fafb;border-radius:12px;padding:10px;border:1px solid #e5e7eb}
+.courtoisie-line{padding:8px;border-radius:10px;margin:6px 0}
+.libre{background:#dcfce7;color:#166534}
+.occupe{background:#fee2e2;color:#991b1b}
 @media(max-width:700px){
-  th{min-width:135px}
-  td{height:70px}
+  th{min-width:145px}
+  td{height:75px}
   .event{font-size:12px}
 }
 </style>
@@ -51,7 +60,7 @@ textarea{min-height:90px}
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier synchronisée Google Sheets & Google Agenda</p>
+  <p>Vue semaine atelier • Google Sheets • Google Agenda</p>
 </header>
 
 <div class="container">
@@ -61,6 +70,7 @@ textarea{min-height:90px}
     <button class="secondary" onclick="aujourdhui()">Aujourd'hui</button>
     <button onclick="changerSemaine(7)">Semaine suivante →</button>
     <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
+    <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
     <strong id="titreSemaine"></strong>
   </div>
 
@@ -73,9 +83,7 @@ textarea{min-height:90px}
 
   <div class="card planning">
     <table>
-      <thead>
-        <tr id="joursHeader"></tr>
-      </thead>
+      <thead><tr id="joursHeader"></tr></thead>
       <tbody id="planningBody"></tbody>
     </table>
   </div>
@@ -84,7 +92,7 @@ textarea{min-height:90px}
 
 <div id="modalForm" class="modal">
   <div class="modal-content">
-    <h2 id="modalTitle">Ajouter un rendez-vous</h2>
+    <h2>Ajouter un rendez-vous</h2>
 
     <div class="formgrid">
       <input id="client" placeholder="Client *">
@@ -145,6 +153,16 @@ textarea{min-height:90px}
   </div>
 </div>
 
+<div id="modalCourtoisie" class="modal">
+  <div class="modal-content">
+    <h2>🚗 Disponibilités véhicules de courtoisie</h2>
+    <div id="courtoisieContent" class="courtoisie-grid"></div>
+    <div class="actions">
+      <button onclick="fermerCourtoisie()">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TFDS7x4Khpeo8jNp4UhEJRjY_le2NDumuHhR-Qkvfeg0-X/exec";
 
@@ -152,10 +170,12 @@ let interventions = [];
 let dateBase = new Date();
 
 const joursNoms = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+const vehiculesCourtoisie = ["Berlingo","208","Up"];
+
 const heures = [
   "08:30","09:00","09:30","10:00","10:30","11:00","11:30",
   "12:00",
-  "13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00"
+  "13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"
 ];
 
 function lundiDeLaSemaine(date){
@@ -213,6 +233,7 @@ function afficher(){
 
   const fin = new Date(lundi);
   fin.setDate(lundi.getDate()+5);
+
   document.getElementById("titreSemaine").innerText =
     "Semaine du " + formatFR(lundi) + " au " + formatFR(fin);
 
@@ -230,13 +251,16 @@ function afficher(){
     let ligne = `<tr><td class="hour">${h}</td>`;
 
     dates.forEach(dateTxt => {
-      const rdvs = interventions.filter(x => x.date === dateTxt && (x.heure || "").slice(0,5) === h);
+      const rdvs = interventions.filter(x =>
+        x.date === dateTxt &&
+        (x.heure || "").slice(0,5) === h
+      );
 
       ligne += `<td class="slot" onclick="ouvrirDepuisCreneau('${dateTxt}','${h}')">`;
 
       rdvs.forEach(r => {
         ligne += `
-          <div class="event ${r.technicien}" onclick="event.stopPropagation();ouvrirDetail(${r.id})">
+          <div class="event ${r.technicien}" onclick="event.stopPropagation();ouvrirDetail('${r.id}')">
             <b>${r.heure || h} - ${r.client || ""}</b><br>
             ${r.vehicule || ""}<br>
             ${r.travaux || ""}<br>
@@ -314,7 +338,9 @@ function ajouter(){
       alert(
         "ATTENTION\n\n" +
         "Le véhicule " + item.courtoisie + " est déjà réservé ce jour-là.\n\n" +
-        "Client : " + conflit.client
+        "Client : " + conflit.client + "\n" +
+        "Véhicule : " + (conflit.vehicule || "") + "\n\n" +
+        "Choisis un autre véhicule ou une autre date."
       );
       return;
     }
@@ -375,6 +401,50 @@ function ouvrirDetail(id){
 
 function fermerDetail(){
   document.getElementById("modalDetail").style.display = "none";
+}
+
+function ouvrirCourtoisie(){
+  const lundi = lundiDeLaSemaine(dateBase);
+  const content = document.getElementById("courtoisieContent");
+  content.innerHTML = "";
+
+  for(let i=0;i<6;i++){
+    const jour = new Date(lundi);
+    jour.setDate(lundi.getDate()+i);
+    const dateTxt = formatDate(jour);
+
+    let html = `<div class="courtoisie-day"><h3>${joursNoms[i]} ${formatFR(jour)}</h3>`;
+
+    vehiculesCourtoisie.forEach(v => {
+      const resa = interventions.find(x => x.date === dateTxt && x.courtoisie === v);
+
+      if(resa){
+        html += `
+          <div class="courtoisie-line occupe">
+            <b>🚗 ${v} : Réservé</b><br>
+            ${resa.client || ""}<br>
+            ${resa.vehicule || ""}<br>
+            ${resa.heure || ""}
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="courtoisie-line libre">
+            <b>🚗 ${v} : Libre</b>
+          </div>
+        `;
+      }
+    });
+
+    html += `</div>`;
+    content.innerHTML += html;
+  }
+
+  document.getElementById("modalCourtoisie").style.display = "flex";
+}
+
+function fermerCourtoisie(){
+  document.getElementById("modalCourtoisie").style.display = "none";
 }
 
 function chargeJour(tech, jour){
