@@ -18,6 +18,7 @@ button.secondary{background:#2563eb}
 button.green{background:#16a34a}
 button.orange{background:#f97316}
 button.danger{background:#dc2626}
+button.small{padding:5px 8px;font-size:12px;margin-top:4px}
 select,input,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid #d1d5db;font-size:15px;box-sizing:border-box}
 textarea{min-height:90px}
 .legend,.charge{display:flex;gap:10px;flex-wrap:wrap}
@@ -33,6 +34,7 @@ textarea{min-height:90px}
 .hour-cell{height:48px;background:#e5e7eb;border-radius:8px;margin:2px;display:flex;align-items:flex-start;justify-content:center;font-weight:bold;font-size:13px;padding-top:4px;box-sizing:border-box}
 .day-cell{height:48px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin:2px;cursor:pointer;box-sizing:border-box}
 .day-cell:hover{outline:2px dashed #2563eb;background:#eff6ff}
+.closed-cell{height:32px;background:#f3f4f6;border:1px dashed #9ca3af;border-radius:8px;margin:2px;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:12px;font-weight:bold}
 .event{position:absolute;left:6px;right:6px;border-radius:10px;padding:8px;font-size:13px;box-shadow:0 2px 8px #0003;cursor:pointer;z-index:5;overflow:hidden;box-sizing:border-box}
 .event b{font-size:14px}
 .Maxime{background:#bfdbfe;border-left:5px solid #2563eb}
@@ -44,14 +46,19 @@ textarea{min-height:90px}
 .modal{display:none;position:fixed;inset:0;background:#0008;z-index:99;align-items:center;justify-content:center;padding:12px}
 .modal-content{background:white;border-radius:18px;padding:18px;max-width:900px;width:100%;box-shadow:0 10px 30px #0005;max-height:90vh;overflow:auto}
 .formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
-.actions{display:flex;gap:8px;margin-top:12px}
-.actions button{flex:1}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.actions button{flex:1;min-width:120px}
+
 .courtoisie-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
 .courtoisie-day{background:#f9fafb;border-radius:12px;padding:10px;border:1px solid #e5e7eb}
 .courtoisie-line{padding:8px;border-radius:10px;margin:6px 0}
 .libre{background:#dcfce7;color:#166534}
 .occupe{background:#fee2e2;color:#991b1b}
-@media(max-width:700px){.agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}.event{font-size:12px}}
+
+@media(max-width:700px){
+  .agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}
+  .event{font-size:12px}
+}
 </style>
 </head>
 
@@ -59,7 +66,7 @@ textarea{min-height:90px}
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier • Blocs multi-jours • Modification • Charge atelier</p>
+  <p>Vue semaine atelier • Pause 12h-14h prise en compte</p>
 </header>
 
 <div class="container">
@@ -71,6 +78,7 @@ textarea{min-height:90px}
     <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
     <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
     <button class="orange" onclick="ouvrirOR()">Créer OR</button>
+
     <select id="filtreTech" style="width:auto" onchange="afficher()">
       <option value="Tous">Tous les techniciens</option>
       <option>Maxime</option>
@@ -79,6 +87,7 @@ textarea{min-height:90px}
       <option>Gaël</option>
       <option value="Courtoisie">Avec véhicule courtoisie</option>
     </select>
+
     <strong id="titreSemaine"></strong>
   </div>
 
@@ -87,6 +96,7 @@ textarea{min-height:90px}
     <span><span class="dot" style="background:#16a34a"></span>Joël</span>
     <span><span class="dot" style="background:#f97316"></span>Guillaume</span>
     <span><span class="dot" style="background:#dc2626"></span>Gaël</span>
+    <span><b>Fermé :</b> 12h00 → 14h00</span>
   </div>
 
   <div class="card charge" id="chargeAtelier"></div>
@@ -158,7 +168,9 @@ textarea{min-height:90px}
   <div class="modal-content">
     <h2>🚗 Disponibilités véhicules de courtoisie</h2>
     <div id="courtoisieContent" class="courtoisie-grid"></div>
-    <div class="actions"><button onclick="fermerCourtoisie()">Fermer</button></div>
+    <div class="actions">
+      <button onclick="fermerCourtoisie()">Fermer</button>
+    </div>
   </div>
 </div>
 
@@ -174,18 +186,26 @@ let editionId = null;
 const joursNoms = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 const techniciens = ["Maxime","Joël","Guillaume","Gaël"];
 const vehiculesCourtoisie = ["Berlingo","208","Up"];
-const heures = ["08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
+
+const heures = [
+  "08:30","09:00","09:30","10:00","10:30","11:00","11:30",
+  "12:00",
+  "14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"
+];
+
 const SLOT_HEIGHT = 52;
 
 function remplirDurees(){
   const select = document.getElementById("duree");
   select.innerHTML = "";
+
   for(let h=0.5; h<=50; h+=0.5){
     const o=document.createElement("option");
     o.value=h.toString();
     o.textContent = h===0.5 ? "30 min" : h%1===0 ? h+"h" : Math.floor(h)+"h30";
     select.appendChild(o);
   }
+
   select.value="1";
 }
 
@@ -198,24 +218,33 @@ function formatDuree(v){
 
 function normaliserHeure(v){
   if(!v)return"";
+
   if(typeof v==="string"){
     const m=v.match(/(\d{1,2}):(\d{2})/);
     if(m)return String(m[1]).padStart(2,"0")+":"+m[2];
   }
+
   const d=new Date(v);
-  if(!isNaN(d))return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  if(!isNaN(d)){
+    return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  }
+
   return"";
 }
 
 function normaliserDate(v){
   if(!v)return"";
+
   if(typeof v==="string"){
     if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;
+
     const fr=v.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
     if(fr)return fr[3]+"-"+fr[2]+"-"+fr[1];
   }
+
   const d=new Date(v);
   if(isNaN(d))return"";
+
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 
@@ -252,8 +281,16 @@ function lundiDeLaSemaine(date){
 
 function prochainJourOuvre(d){
   const n=new Date(d);
-  do{n.setDate(n.getDate()+1)}while(n.getDay()===0);
+  do{
+    n.setDate(n.getDate()+1);
+  }while(n.getDay()===0);
   return n;
+}
+
+function ajusterHeureOuverture(heureMin){
+  if(heureMin < 510) return 510;      // avant 08h30 => 08h30
+  if(heureMin >= 720 && heureMin < 840) return 840; // 12h00-14h00 => 14h00
+  return heureMin;
 }
 
 function genererSegments(rdv){
@@ -262,17 +299,27 @@ function genererSegments(rdv){
   let jour=dateObj(rdv.date);
   let heureMin=minutesDepuisMinuit(rdv.heure);
 
-  while(restant>0 && segments.length<20){
-    if(jour.getDay()===0){jour=prochainJourOuvre(jour);heureMin=510;continue}
-    if(heureMin<510)heureMin=510;
-    if(heureMin>=720 && heureMin<810)heureMin=810;
-    if(heureMin>=1080){jour=prochainJourOuvre(jour);heureMin=510;continue}
+  while(restant>0 && segments.length<40){
+
+    if(jour.getDay()===0){
+      jour=prochainJourOuvre(jour);
+      heureMin=510;
+      continue;
+    }
+
+    heureMin = ajusterHeureOuverture(heureMin);
+
+    if(heureMin >= 1080){
+      jour=prochainJourOuvre(jour);
+      heureMin=510;
+      continue;
+    }
 
     let limite = heureMin < 720 ? 720 : 1080;
     let dispo = limite - heureMin;
     let pris = Math.min(restant, dispo);
 
-    if(pris>0){
+    if(pris > 0){
       segments.push({
         id:rdv.id,
         rdv:rdv,
@@ -280,12 +327,19 @@ function genererSegments(rdv){
         heure:heureDepuisMinutes(heureMin),
         minutes:pris
       });
-      restant-=pris;
-      heureMin+=pris;
-    }else{
-      heureMin=810;
+
+      restant -= pris;
+      heureMin += pris;
+    } else {
+      if(heureMin < 840){
+        heureMin = 840;
+      } else {
+        jour=prochainJourOuvre(jour);
+        heureMin=510;
+      }
     }
   }
+
   return segments;
 }
 
@@ -306,6 +360,7 @@ function chargerPlanning(){
         courtoisie:x.Courtoisie,
         statut:x.Statut
       })).filter(x=>x.date&&x.heure);
+
       afficher();
     })
     .catch(()=>alert("Impossible de charger le planning Google Sheets."));
@@ -316,21 +371,43 @@ function afficher(){
   const agenda=document.getElementById("agenda");
   agenda.innerHTML="";
 
-  const fin=new Date(lundi);fin.setDate(lundi.getDate()+5);
+  const fin=new Date(lundi);
+  fin.setDate(lundi.getDate()+5);
+
   document.getElementById("titreSemaine").innerText="Semaine du "+formatFR(lundi)+" au "+formatFR(fin);
 
   let dates=[];
+
   agenda.innerHTML+=`<div class="agenda-header">Heure</div>`;
+
   for(let i=0;i<6;i++){
-    const j=new Date(lundi);j.setDate(lundi.getDate()+i);
-    const dt=formatDate(j);dates.push(dt);
+    const j=new Date(lundi);
+    j.setDate(lundi.getDate()+i);
+
+    const dt=formatDate(j);
+    dates.push(dt);
+
     agenda.innerHTML+=`<div class="agenda-header">${joursNoms[i]}<br>${formatFR(j)}</div>`;
   }
 
   heures.forEach(h=>{
+    if(h==="12:00"){
+      agenda.innerHTML+=`<div class="hour-cell">12h-14h</div>`;
+      dates.forEach(()=>{
+        agenda.innerHTML+=`<div class="closed-cell">FERMÉ</div>`;
+      });
+      return;
+    }
+
     agenda.innerHTML+=`<div class="hour-cell">${h}</div>`;
+
     dates.forEach(dt=>{
-      agenda.innerHTML+=`<div class="day-cell" ondragover="event.preventDefault()" ondrop="deposerRDV(event,'${dt}','${h}')" onclick="ouvrirDepuisCreneau('${dt}','${h}')"></div>`;
+      agenda.innerHTML+=`
+        <div class="day-cell"
+          ondragover="event.preventDefault()"
+          ondrop="deposerRDV(event,'${dt}','${h}')"
+          onclick="ouvrirDepuisCreneau('${dt}','${h}')">
+        </div>`;
     });
   });
 
@@ -340,8 +417,10 @@ function afficher(){
 
 function rdvVisible(r){
   const f=document.getElementById("filtreTech").value;
+
   if(f==="Tous")return true;
   if(f==="Courtoisie")return r.courtoisie&&r.courtoisie!=="Aucun";
+
   return r.technicien===f;
 }
 
@@ -351,9 +430,12 @@ function placerEvenements(dates){
 
   interventions.filter(rdvVisible).forEach(r=>{
     const segments=genererSegments(r).filter(s=>dates.includes(s.date));
+
     segments.forEach(seg=>{
       const dayIndex=dates.indexOf(seg.date);
-      const hIndex=heures.indexOf(seg.heure);
+      const heuresSansFermeture = heures.filter(h=>h!=="12:00");
+      const hIndex = heuresSansFermeture.indexOf(seg.heure);
+
       if(dayIndex<0||hIndex<0)return;
 
       const cell=cells[hIndex*6+dayIndex];
@@ -378,9 +460,20 @@ function placerEvenements(dates){
         ${r.travaux||""}<br>
         <span class="badge">${r.technicien||""}</span>
         <span class="badge">${formatDuree(r.duree)}</span>
-        ${r.courtoisie&&r.courtoisie!=="Aucun"?`<span class="badge">🚗 ${r.courtoisie}</span>`:""}
+        ${r.courtoisie&&r.courtoisie!=="Aucun"?`<span class="badge">🚗 ${r.courtoisie}</span>`:""}<br>
+        <button class="secondary small" onclick="event.stopPropagation();ouvrirModification('${r.id}')">✏️ Modifier</button>
       `;
-      ev.onclick=e=>{e.stopPropagation();ouvrirDetail(String(r.id))};
+
+      ev.onclick=e=>{
+        e.stopPropagation();
+        ouvrirDetail(String(r.id));
+      };
+
+      ev.ondblclick=e=>{
+        e.stopPropagation();
+        ouvrirModification(String(r.id));
+      };
+
       agenda.appendChild(ev);
     });
   });
@@ -389,34 +482,83 @@ function placerEvenements(dates){
 function afficherCharge(dates){
   const box=document.getElementById("chargeAtelier");
   const auj=dates[0];
+
   box.innerHTML="";
+
   techniciens.forEach(t=>{
     const h=chargeJour(t,auj);
     const cls=h>=7?"full":h>=5?"warn":"ok";
+
     box.innerHTML+=`<div class="chargebox ${cls}">${t} : ${formatDuree(h)} / 7h</div>`;
   });
 }
 
 function ouvrirDepuisCreneau(d,h){
-  modeEdition=false;editionId=null;
+  modeEdition=false;
+  editionId=null;
+
   document.getElementById("formTitle").innerText="Ajouter un rendez-vous";
+
   viderFormulaire();
-  date.value=d;heure.value=h;
+
+  date.value=d;
+  heure.value=h;
+
   modalForm.style.display="flex";
 }
 
 function ouvrirFormulaire(){
-  modeEdition=false;editionId=null;
+  modeEdition=false;
+  editionId=null;
+
   document.getElementById("formTitle").innerText="Ajouter un rendez-vous";
-  viderFormulaire();modalForm.style.display="flex";
+
+  viderFormulaire();
+
+  modalForm.style.display="flex";
 }
 
-function fermerFormulaire(){modalForm.style.display="none"}
+function ouvrirModification(id){
+  const r=interventions.find(x=>String(x.id)===String(id));
+
+  if(!r)return;
+
+  modeEdition=true;
+  editionId=r.id;
+  rdvSelectionne=r;
+
+  document.getElementById("formTitle").innerText="Modifier le rendez-vous";
+
+  client.value=r.client||"";
+  telephone.value=r.telephone||"";
+  vehicule.value=r.vehicule||"";
+  travaux.value=r.travaux||"";
+  date.value=r.date||"";
+  heure.value=r.heure||"";
+  duree.value=String(r.duree||1);
+  technicien.value=r.technicien||"";
+  courtoisie.value=r.courtoisie||"Aucun";
+  statut.value=r.statut||"À faire";
+
+  modalDetail.style.display="none";
+  modalForm.style.display="flex";
+}
+
+function fermerFormulaire(){
+  modalForm.style.display="none";
+}
 
 function viderFormulaire(){
-  client.value="";telephone.value="";vehicule.value="";travaux.value="";
-  date.value="";heure.value="";duree.value="1";technicien.value="";
-  courtoisie.value="Aucun";statut.value="À faire";
+  client.value="";
+  telephone.value="";
+  vehicule.value="";
+  travaux.value="";
+  date.value="";
+  heure.value="";
+  duree.value="1";
+  technicien.value="";
+  courtoisie.value="Aucun";
+  statut.value="À faire";
 }
 
 function lireForm(){
@@ -441,41 +583,100 @@ function enregistrerFormulaire(){
 
 function ajouter(){
   const item=lireForm();
-  if(!item.client||!item.date||!item.heure||!item.technicien){alert("Il faut au minimum client, date, heure et technicien.");return}
 
-  fetch(API_URL,{method:"POST",body:JSON.stringify({
-    ID:item.id,Date:item.date,Heure:item.heure,Client:item.client,"Véhicule":item.vehicule,
-    "Téléphone":item.telephone,Travaux:item.travaux,Technicien:item.technicien,
-    "Durée":item.duree,Courtoisie:item.courtoisie,Statut:item.statut
-  })}).then(()=>{fermerFormulaire();setTimeout(chargerPlanning,800)})
+  if(!item.client||!item.date||!item.heure||!item.technicien){
+    alert("Il faut au minimum client, date, heure et technicien.");
+    return;
+  }
+
+  fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      ID:item.id,
+      Date:item.date,
+      Heure:item.heure,
+      Client:item.client,
+      "Véhicule":item.vehicule,
+      "Téléphone":item.telephone,
+      Travaux:item.travaux,
+      Technicien:item.technicien,
+      "Durée":item.duree,
+      Courtoisie:item.courtoisie,
+      Statut:item.statut
+    })
+  })
+  .then(()=>{
+    fermerFormulaire();
+    setTimeout(chargerPlanning,800);
+  })
   .catch(()=>alert("Erreur lors de l'enregistrement."));
 }
 
 function modifierRDV(){
   const item=lireForm();
-  fetch(API_URL,{method:"POST",body:JSON.stringify({
-    action:"update",OldID:editionId,ID:item.id,Date:item.date,Heure:item.heure,Client:item.client,
-    "Véhicule":item.vehicule,"Téléphone":item.telephone,Travaux:item.travaux,
-    Technicien:item.technicien,"Durée":item.duree,Courtoisie:item.courtoisie,Statut:item.statut
-  })}).then(()=>{fermerFormulaire();fermerDetail();setTimeout(chargerPlanning,800)})
-  .catch(()=>alert("Erreur lors de la modification. Il faut le Code.gs avec action update."));
+
+  if(!item.client||!item.date||!item.heure||!item.technicien){
+    alert("Il faut au minimum client, date, heure et technicien.");
+    return;
+  }
+
+  fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      action:"update",
+      OldID:editionId,
+      ID:item.id,
+      Date:item.date,
+      Heure:item.heure,
+      Client:item.client,
+      "Véhicule":item.vehicule,
+      "Téléphone":item.telephone,
+      Travaux:item.travaux,
+      Technicien:item.technicien,
+      "Durée":item.duree,
+      Courtoisie:item.courtoisie,
+      Statut:item.statut
+    })
+  })
+  .then(()=>{
+    fermerFormulaire();
+    fermerDetail();
+    setTimeout(chargerPlanning,800);
+  })
+  .catch(()=>alert("Erreur lors de la modification."));
 }
 
 function deposerRDV(e,d,h){
   const id=e.dataTransfer.getData("text/plain");
   const r=interventions.find(x=>String(x.id)===String(id));
+
   if(!r)return;
+
   rdvSelectionne=r;
-  modeEdition=true;editionId=r.id;
-  client.value=r.client||"";telephone.value=r.telephone||"";vehicule.value=r.vehicule||"";
-  travaux.value=r.travaux||"";date.value=d;heure.value=h;duree.value=String(r.duree);
-  technicien.value=r.technicien||"";courtoisie.value=r.courtoisie||"Aucun";statut.value=r.statut||"À faire";
+  modeEdition=true;
+  editionId=r.id;
+
+  client.value=r.client||"";
+  telephone.value=r.telephone||"";
+  vehicule.value=r.vehicule||"";
+  travaux.value=r.travaux||"";
+  date.value=d;
+  heure.value=h;
+  duree.value=String(r.duree);
+  technicien.value=r.technicien||"";
+  courtoisie.value=r.courtoisie||"Aucun";
+  statut.value=r.statut||"À faire";
+
   modifierRDV();
 }
 
 function ouvrirDetail(id){
   const r=interventions.find(x=>String(x.id)===String(id));
-  if(!r)return;rdvSelectionne=r;
+
+  if(!r)return;
+
+  rdvSelectionne=r;
+
   detailContent.innerHTML=`
     <p><b>Client :</b> ${r.client||""}</p>
     <p><b>Téléphone :</b> ${r.telephone||""}</p>
@@ -485,75 +686,141 @@ function ouvrirDetail(id){
     <p><b>Technicien :</b> ${r.technicien||""}</p>
     <p><b>Courtoisie :</b> ${r.courtoisie||"Aucun"}</p>
     <p><b>Statut :</b> ${r.statut||""}</p>
-    <p><b>Travaux :</b><br>${r.travaux||""}</p>`;
+    <p><b>Travaux :</b><br>${r.travaux||""}</p>
+  `;
+
   modalDetail.style.display="flex";
 }
 
-function fermerDetail(){modalDetail.style.display="none";rdvSelectionne=null}
+function fermerDetail(){
+  modalDetail.style.display="none";
+  rdvSelectionne=null;
+}
 
 function modifierDepuisDetail(){
   if(!rdvSelectionne)return;
-  modeEdition=true;editionId=rdvSelectionne.id;
-  formTitle.innerText="Modifier le rendez-vous";
-  client.value=rdvSelectionne.client||"";telephone.value=rdvSelectionne.telephone||"";
-  vehicule.value=rdvSelectionne.vehicule||"";travaux.value=rdvSelectionne.travaux||"";
-  date.value=rdvSelectionne.date;heure.value=rdvSelectionne.heure;duree.value=String(rdvSelectionne.duree);
-  technicien.value=rdvSelectionne.technicien||"";courtoisie.value=rdvSelectionne.courtoisie||"Aucun";
-  statut.value=rdvSelectionne.statut||"À faire";
-  modalForm.style.display="flex";
+  ouvrirModification(String(rdvSelectionne.id));
 }
 
 function supprimerRDV(){
   if(!rdvSelectionne)return;
+
   if(!confirm("Supprimer ce RDV partout ?"))return;
+
   fetch(API_URL+"?action=delete&id="+encodeURIComponent(rdvSelectionne.id)+"&t="+Date.now())
-    .then(r=>r.json()).then(res=>{if(res.ok){fermerDetail();chargerPlanning()}else alert("Suppression impossible")})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res.ok){
+        fermerDetail();
+        chargerPlanning();
+      }else{
+        alert("Suppression impossible");
+      }
+    })
     .catch(()=>alert("Erreur lors de la suppression."));
 }
 
 function ouvrirOR(){
   const r=rdvSelectionne;
-  if(!r){alert("Clique d'abord sur un RDV.");return}
+
+  if(!r){
+    alert("Clique d'abord sur un RDV.");
+    return;
+  }
+
   const w=window.open("","_blank");
-  w.document.write(`<html><head><title>OR ADN Camper</title></head><body style="font-family:Arial;padding:30px">
-  <h1>ADN Camper - Ordre de réparation</h1>
-  <p><b>Client :</b> ${r.client||""}</p>
-  <p><b>Téléphone :</b> ${r.telephone||""}</p>
-  <p><b>Véhicule :</b> ${r.vehicule||""}</p>
-  <p><b>Date :</b> ${r.date||""} ${r.heure||""}</p>
-  <p><b>Technicien :</b> ${r.technicien||""}</p>
-  <p><b>Travaux :</b><br>${r.travaux||""}</p>
-  <br><br><p>Signature client :</p><div style="height:120px;border:1px solid #000"></div>
-  <script>window.print()<\/script></body></html>`);
+
+  w.document.write(`
+    <html>
+    <head>
+      <title>OR ADN Camper</title>
+    </head>
+    <body style="font-family:Arial;padding:30px">
+      <h1>ADN Camper - Ordre de réparation</h1>
+      <p><b>Client :</b> ${r.client||""}</p>
+      <p><b>Téléphone :</b> ${r.telephone||""}</p>
+      <p><b>Véhicule :</b> ${r.vehicule||""}</p>
+      <p><b>Date :</b> ${r.date||""} ${r.heure||""}</p>
+      <p><b>Technicien :</b> ${r.technicien||""}</p>
+      <p><b>Travaux :</b><br>${r.travaux||""}</p>
+      <br><br>
+      <p>Signature client :</p>
+      <div style="height:120px;border:1px solid #000"></div>
+      <script>window.print()<\/script>
+    </body>
+    </html>
+  `);
 }
 
 function ouvrirCourtoisie(){
   const lundi=lundiDeLaSemaine(dateBase);
+
   courtoisieContent.innerHTML="";
+
   for(let i=0;i<6;i++){
-    const j=new Date(lundi);j.setDate(lundi.getDate()+i);
+    const j=new Date(lundi);
+    j.setDate(lundi.getDate()+i);
+
     const dt=formatDate(j);
+
     let html=`<div class="courtoisie-day"><h3>${joursNoms[i]} ${formatFR(j)}</h3>`;
+
     vehiculesCourtoisie.forEach(v=>{
       const resa=interventions.find(x=>x.date===dt&&x.courtoisie===v);
-      html+=resa?`<div class="courtoisie-line occupe"><b>🚗 ${v} : Réservé</b><br>${resa.client||""}<br>${resa.heure||""}</div>`:`<div class="courtoisie-line libre"><b>🚗 ${v} : Libre</b></div>`;
+
+      html+=resa
+        ? `<div class="courtoisie-line occupe"><b>🚗 ${v} : Réservé</b><br>${resa.client||""}<br>${resa.heure||""}</div>`
+        : `<div class="courtoisie-line libre"><b>🚗 ${v} : Libre</b></div>`;
     });
-    html+=`</div>`;courtoisieContent.innerHTML+=html;
+
+    html+=`</div>`;
+
+    courtoisieContent.innerHTML+=html;
   }
+
   modalCourtoisie.style.display="flex";
 }
-function fermerCourtoisie(){modalCourtoisie.style.display="none"}
+
+function fermerCourtoisie(){
+  modalCourtoisie.style.display="none";
+}
 
 function chargeJour(tech,jour){
-  return interventions.filter(i=>i.technicien===tech&&i.date===jour).reduce((t,i)=>t+Number(i.duree||0),0);
+  let total = 0;
+
+  interventions
+    .filter(i=>i.technicien===tech)
+    .forEach(i=>{
+      const segments = genererSegments(i);
+      segments.forEach(s=>{
+        if(s.date === jour){
+          total += s.minutes / 60;
+        }
+      });
+    });
+
+  return total;
 }
-function changerSemaine(nb){dateBase.setDate(dateBase.getDate()+nb);afficher()}
-function aujourdhui(){dateBase=new Date();afficher()}
-if("serviceWorker"in navigator){navigator.serviceWorker.register("service-worker.js")}
+
+function changerSemaine(nb){
+  dateBase.setDate(dateBase.getDate()+nb);
+  afficher();
+}
+
+function aujourdhui(){
+  dateBase=new Date();
+  afficher();
+}
+
+if("serviceWorker"in navigator){
+  navigator.serviceWorker.register("service-worker.js");
+}
+
 window.addEventListener("resize",()=>afficher());
 
 remplirDurees();
 chargerPlanning();
 </script>
+
 </body>
 </html>
