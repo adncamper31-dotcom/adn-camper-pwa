@@ -1,1 +1,25 @@
 
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ADN Camper</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#111827" />
+</head>
+<body>
+  <h1>ADN Camper</h1>
+  <p>Application PWA installable sur iPhone, Android et PC.</p>
+
+  <button onclick="alert('Ça marche Chouchou 🚀')">
+    Tester l'application
+  </button>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js');
+    }
+  </script>
+</body>
+</html>
