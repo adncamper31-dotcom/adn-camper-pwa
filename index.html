@@ -101,15 +101,7 @@ textarea{min-height:90px}
       <input id="date" type="date">
       <input id="heure" type="time">
 
-      <select id="duree">
-        <option value="1">1h</option>
-        <option value="2">2h</option>
-        <option value="3">3h</option>
-        <option value="4">4h</option>
-        <option value="7">1 journée</option>
-        <option value="14">2 journées</option>
-        <option value="21">3 journées</option>
-      </select>
+      <select id="duree"></select>
 
       <select id="technicien">
         <option value="">Technicien *</option>
@@ -177,6 +169,26 @@ const heures = [
   "12:00",
   "13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"
 ];
+
+function remplirDurees(){
+  const select = document.getElementById("duree");
+  select.innerHTML = "";
+
+  for(let h = 0.5; h <= 50; h += 0.5){
+    const option = document.createElement("option");
+    option.value = h;
+
+    if(h % 1 === 0){
+      option.textContent = h + " h";
+    } else {
+      option.textContent = Math.floor(h) + " h 30";
+    }
+
+    select.appendChild(option);
+  }
+
+  select.value = "1";
+}
 
 function lundiDeLaSemaine(date){
   const d = new Date(date);
@@ -265,7 +277,7 @@ function afficher(){
             ${r.vehicule || ""}<br>
             ${r.travaux || ""}<br>
             <span class="badge">${r.technicien || ""}</span>
-            <span class="badge">${r.duree || 1}h</span>
+            <span class="badge">${formatDuree(r.duree || 1)}</span>
             ${r.courtoisie && r.courtoisie !== "Aucun" ? `<span class="badge">🚗 ${r.courtoisie}</span>` : ""}
           </div>
         `;
@@ -277,6 +289,16 @@ function afficher(){
     ligne += `</tr>`;
     body.innerHTML += ligne;
   });
+}
+
+function formatDuree(valeur){
+  const h = Number(valeur || 0);
+
+  if(h % 1 === 0){
+    return h + " h";
+  }
+
+  return Math.floor(h) + " h 30";
 }
 
 function ouvrirDepuisCreneau(dateChoisie, heureChoisie){
@@ -352,7 +374,7 @@ function ajouter(){
   if(chargeNouvelle > 7){
     if(!confirm(
       "ATTENTION\n\n" +
-      item.technicien + " sera chargé à " + chargeNouvelle + "h ce jour-là.\n\n" +
+      item.technicien + " sera chargé à " + formatDuree(chargeNouvelle) + " ce jour-là.\n\n" +
       "Continuer quand même ?"
     )) return;
   }
@@ -389,7 +411,7 @@ function ouvrirDetail(id){
     <p><b>Téléphone :</b> ${r.telephone || ""}</p>
     <p><b>Véhicule :</b> ${r.vehicule || ""}</p>
     <p><b>Date / Heure :</b> ${r.date || ""} à ${r.heure || ""}</p>
-    <p><b>Durée :</b> ${r.duree || ""}h</p>
+    <p><b>Durée :</b> ${formatDuree(r.duree || 1)}</p>
     <p><b>Technicien :</b> ${r.technicien || ""}</p>
     <p><b>Courtoisie :</b> ${r.courtoisie || "Aucun"}</p>
     <p><b>Statut :</b> ${r.statut || ""}</p>
@@ -467,6 +489,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('service-worker.js');
 }
 
+remplirDurees();
 chargerPlanning();
 </script>
 
