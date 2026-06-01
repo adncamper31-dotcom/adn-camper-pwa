@@ -1,71 +1,95 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Planning ADN Camper</title>
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#111827" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planning ADN Camper</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111827">
 
-  <style>
-    body{margin:0;font-family:Arial;background:#eef2f7;color:#111827}
-    header{background:#111827;color:white;padding:18px;text-align:center}
-    .container{padding:14px;max-width:1500px;margin:auto}
-    .card{background:white;border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 4px 14px #0002}
-    input,select,textarea,button{width:100%;padding:11px;margin:5px 0;border-radius:10px;border:1px solid #d1d5db;font-size:15px;box-sizing:border-box}
-    button{background:#111827;color:white;font-weight:bold;cursor:pointer}
-    .formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
-    .topbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .topbar button{width:auto;padding:10px 14px}
-    .planning{overflow-x:auto}
-    table{width:100%;border-collapse:separate;border-spacing:8px}
-    th{background:#111827;color:white;border-radius:12px;padding:10px;min-width:150px}
-    td{background:#f9fafb;border-radius:12px;vertical-align:top;padding:8px;min-height:120px}
-    .task{background:white;border-left:6px solid #111827;border-radius:12px;padding:10px;margin-bottom:8px;box-shadow:0 2px 8px #0001;font-size:14px}
-    .badge{display:inline-block;padding:4px 8px;border-radius:20px;background:#e5e7eb;margin:2px;font-size:12px}
-    .ok{background:#dcfce7;color:#166534}
-    .danger{background:#fee2e2;color:#991b1b}
-    .wait{background:#fef3c7;color:#92400e}
-    .hidden{display:none}
-    .tech-Maxime{border-left-color:#2563eb}
-    .tech-Joël{border-left-color:#16a34a}
-    .tech-Guillaume{border-left-color:#f97316}
-    .tech-Gaël{border-left-color:#dc2626}
-    .charge0{background:#dcfce7;color:#166534}
-    .charge1{background:#fef3c7;color:#92400e}
-    .charge2{background:#fee2e2;color:#991b1b}
-    .mini{font-size:12px;color:#374151}
-  </style>
+<style>
+body{margin:0;font-family:Arial;background:#eef2f7;color:#111827}
+header{background:#111827;color:white;padding:16px;text-align:center}
+.container{padding:12px;max-width:1600px;margin:auto}
+.card{background:white;border-radius:16px;padding:12px;margin-bottom:12px;box-shadow:0 4px 14px #0002}
+.topbar{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+button{background:#111827;color:white;border:0;border-radius:10px;padding:10px 14px;font-weight:bold;cursor:pointer}
+button.secondary{background:#2563eb}
+button.danger{background:#dc2626}
+.planning{overflow-x:auto}
+table{width:100%;border-collapse:separate;border-spacing:4px}
+th{background:#111827;color:white;border-radius:10px;padding:8px;min-width:170px}
+td{background:#f9fafb;border-radius:8px;vertical-align:top;padding:5px;height:58px;border:1px solid #e5e7eb}
+td.slot{cursor:pointer}
+td.slot:hover{outline:2px dashed #2563eb;background:#eff6ff}
+.hour{background:#e5e7eb;font-weight:bold;text-align:center;width:70px;min-width:70px}
+.event{border-radius:10px;padding:8px;font-size:13px;margin-bottom:4px;box-shadow:0 2px 6px #0002;cursor:pointer}
+.event b{font-size:14px}
+.Maxime{background:#bfdbfe;border-left:5px solid #2563eb}
+.Joël{background:#bbf7d0;border-left:5px solid #16a34a}
+.Guillaume{background:#fed7aa;border-left:5px solid #f97316}
+.Gaël{background:#fecaca;border-left:5px solid #dc2626}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#e5e7eb;font-size:12px;margin:2px}
+.modal{display:none;position:fixed;inset:0;background:#0008;z-index:99;align-items:center;justify-content:center;padding:12px}
+.modal-content{background:white;border-radius:18px;padding:18px;max-width:720px;width:100%;box-shadow:0 10px 30px #0005}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+input,select,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid #d1d5db;font-size:15px;box-sizing:border-box}
+textarea{min-height:90px}
+.actions{display:flex;gap:8px;margin-top:12px}
+.actions button{flex:1}
+.legend{display:flex;gap:10px;flex-wrap:wrap}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:5px}
+@media(max-width:700px){
+  th{min-width:135px}
+  td{height:70px}
+  .event{font-size:12px}
+}
+</style>
 </head>
 
 <body>
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Atelier • Techniciens • Véhicules de courtoisie</p>
+  <p>Vue semaine atelier synchronisée Google Sheets & Google Agenda</p>
 </header>
 
 <div class="container">
 
-  <div class="card">
-    <div class="topbar">
-      <button onclick="afficherVue('semaine')">📅 Semaine</button>
-      <button onclick="afficherVue('dispos')">📊 Disponibilités</button>
-      <button onclick="afficherVue('complet')">🗓️ Planning complet 30 jours</button>
-      <button onclick="changerSemaine(-7)">← Semaine précédente</button>
-      <button onclick="aujourdhui()">Aujourd'hui</button>
-      <button onclick="changerSemaine(7)">Semaine suivante →</button>
-      <strong id="titreSemaine"></strong>
-    </div>
+  <div class="card topbar">
+    <button onclick="changerSemaine(-7)">← Semaine précédente</button>
+    <button class="secondary" onclick="aujourdhui()">Aujourd'hui</button>
+    <button onclick="changerSemaine(7)">Semaine suivante →</button>
+    <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
+    <strong id="titreSemaine"></strong>
   </div>
 
-  <div class="card">
-    <h2>Ajouter une intervention</h2>
+  <div class="card legend">
+    <span><span class="dot" style="background:#2563eb"></span>Maxime</span>
+    <span><span class="dot" style="background:#16a34a"></span>Joël</span>
+    <span><span class="dot" style="background:#f97316"></span>Guillaume</span>
+    <span><span class="dot" style="background:#dc2626"></span>Gaël</span>
+  </div>
+
+  <div class="card planning">
+    <table>
+      <thead>
+        <tr id="joursHeader"></tr>
+      </thead>
+      <tbody id="planningBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div id="modalForm" class="modal">
+  <div class="modal-content">
+    <h2 id="modalTitle">Ajouter un rendez-vous</h2>
 
     <div class="formgrid">
-      <input id="client" placeholder="Client">
-      <input id="vehicule" placeholder="Véhicule">
+      <input id="client" placeholder="Client *">
       <input id="telephone" placeholder="Téléphone">
+      <input id="vehicule" placeholder="Véhicule">
       <input id="date" type="date">
       <input id="heure" type="time">
 
@@ -80,7 +104,7 @@
       </select>
 
       <select id="technicien">
-        <option value="">Technicien</option>
+        <option value="">Technicien *</option>
         <option>Maxime</option>
         <option>Joël</option>
         <option>Guillaume</option>
@@ -88,7 +112,6 @@
       </select>
 
       <select id="courtoisie">
-        <option value="">Courtoisie</option>
         <option>Aucun</option>
         <option>Berlingo</option>
         <option>208</option>
@@ -104,51 +127,22 @@
     </div>
 
     <textarea id="travaux" placeholder="Travaux à réaliser"></textarea>
-    <button onclick="ajouter()">Ajouter au planning</button>
-  </div>
 
-  <div id="vueSemaine" class="card planning">
-    <h2>Planning semaine</h2>
-    <table>
-      <thead><tr id="joursHeader"></tr></thead>
-      <tbody><tr id="joursBody"></tr></tbody>
-    </table>
+    <div class="actions">
+      <button onclick="fermerFormulaire()">Annuler</button>
+      <button class="secondary" onclick="ajouter()">Enregistrer</button>
+    </div>
   </div>
+</div>
 
-  <div id="vueDispos" class="card planning hidden">
-    <h2>Disponibilités atelier</h2>
-    <div id="premiersCreneaux"></div>
-    <table>
-      <thead>
-        <tr>
-          <th>Technicien</th>
-          <th>Aujourd'hui</th>
-          <th>Demain</th>
-          <th>Cette semaine</th>
-          <th>Premier jour disponible</th>
-        </tr>
-      </thead>
-      <tbody id="tableDispos"></tbody>
-    </table>
+<div id="modalDetail" class="modal">
+  <div class="modal-content">
+    <h2>Détails du rendez-vous</h2>
+    <div id="detailContent"></div>
+    <div class="actions">
+      <button onclick="fermerDetail()">Fermer</button>
+    </div>
   </div>
-
-  <div id="vueComplet" class="card planning hidden">
-    <h2>Planning complet 30 jours</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Maxime</th>
-          <th>Joël</th>
-          <th>Guillaume</th>
-          <th>Gaël</th>
-          <th>Véhicules courtoisie</th>
-        </tr>
-      </thead>
-      <tbody id="tableComplet"></tbody>
-    </table>
-  </div>
-
 </div>
 
 <script>
@@ -156,23 +150,13 @@ const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TF
 
 let interventions = [];
 let dateBase = new Date();
-let vueActuelle = "semaine";
 
-const techniciens = ["Maxime","Joël","Guillaume","Gaël"];
 const joursNoms = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
-
-function afficherVue(vue){
-  vueActuelle = vue;
-  document.getElementById("vueSemaine").classList.add("hidden");
-  document.getElementById("vueDispos").classList.add("hidden");
-  document.getElementById("vueComplet").classList.add("hidden");
-
-  if(vue === "semaine") document.getElementById("vueSemaine").classList.remove("hidden");
-  if(vue === "dispos") document.getElementById("vueDispos").classList.remove("hidden");
-  if(vue === "complet") document.getElementById("vueComplet").classList.remove("hidden");
-
-  afficher();
-}
+const heures = [
+  "08:30","09:00","09:30","10:00","10:30","11:00","11:30",
+  "12:00",
+  "13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00"
+];
 
 function lundiDeLaSemaine(date){
   const d = new Date(date);
@@ -186,14 +170,14 @@ function formatDate(d){
 }
 
 function formatFR(d){
-  return d.toLocaleDateString("fr-FR", {weekday:"short", day:"2-digit", month:"2-digit"});
+  return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
 }
 
-function normaliserDate(valeur){
-  if(!valeur) return "";
-  if(typeof valeur === "string" && valeur.includes("-")) return valeur;
-  const d = new Date(valeur);
-  if(isNaN(d)) return valeur;
+function normaliserDate(v){
+  if(!v) return "";
+  if(typeof v === "string" && v.includes("-")) return v;
+  const d = new Date(v);
+  if(isNaN(d)) return v;
   return formatDate(d);
 }
 
@@ -219,12 +203,93 @@ function chargerPlanning(){
     .catch(() => alert("Impossible de charger le planning Google Sheets."));
 }
 
+function afficher(){
+  const lundi = lundiDeLaSemaine(dateBase);
+  const header = document.getElementById("joursHeader");
+  const body = document.getElementById("planningBody");
+
+  header.innerHTML = "<th>Heure</th>";
+  body.innerHTML = "";
+
+  const fin = new Date(lundi);
+  fin.setDate(lundi.getDate()+5);
+  document.getElementById("titreSemaine").innerText =
+    "Semaine du " + formatFR(lundi) + " au " + formatFR(fin);
+
+  let dates = [];
+
+  for(let i=0;i<6;i++){
+    const jour = new Date(lundi);
+    jour.setDate(lundi.getDate()+i);
+    const dateTxt = formatDate(jour);
+    dates.push(dateTxt);
+    header.innerHTML += `<th>${joursNoms[i]}<br>${formatFR(jour)}</th>`;
+  }
+
+  heures.forEach(h => {
+    let ligne = `<tr><td class="hour">${h}</td>`;
+
+    dates.forEach(dateTxt => {
+      const rdvs = interventions.filter(x => x.date === dateTxt && (x.heure || "").slice(0,5) === h);
+
+      ligne += `<td class="slot" onclick="ouvrirDepuisCreneau('${dateTxt}','${h}')">`;
+
+      rdvs.forEach(r => {
+        ligne += `
+          <div class="event ${r.technicien}" onclick="event.stopPropagation();ouvrirDetail(${r.id})">
+            <b>${r.heure || h} - ${r.client || ""}</b><br>
+            ${r.vehicule || ""}<br>
+            ${r.travaux || ""}<br>
+            <span class="badge">${r.technicien || ""}</span>
+            <span class="badge">${r.duree || 1}h</span>
+            ${r.courtoisie && r.courtoisie !== "Aucun" ? `<span class="badge">🚗 ${r.courtoisie}</span>` : ""}
+          </div>
+        `;
+      });
+
+      ligne += `</td>`;
+    });
+
+    ligne += `</tr>`;
+    body.innerHTML += ligne;
+  });
+}
+
+function ouvrirDepuisCreneau(dateChoisie, heureChoisie){
+  viderFormulaire();
+  document.getElementById("date").value = dateChoisie;
+  document.getElementById("heure").value = heureChoisie;
+  document.getElementById("modalForm").style.display = "flex";
+}
+
+function ouvrirFormulaire(){
+  viderFormulaire();
+  document.getElementById("modalForm").style.display = "flex";
+}
+
+function fermerFormulaire(){
+  document.getElementById("modalForm").style.display = "none";
+}
+
+function viderFormulaire(){
+  client.value = "";
+  telephone.value = "";
+  vehicule.value = "";
+  travaux.value = "";
+  date.value = "";
+  heure.value = "";
+  duree.value = "1";
+  technicien.value = "";
+  courtoisie.value = "Aucun";
+  statut.value = "À faire";
+}
+
 function ajouter(){
   const item = {
     id: Date.now(),
     client: client.value.trim(),
-    vehicule: vehicule.value.trim(),
     telephone: telephone.value.trim(),
+    vehicule: vehicule.value.trim(),
     travaux: travaux.value.trim(),
     date: date.value,
     heure: heure.value,
@@ -234,23 +299,22 @@ function ajouter(){
     statut: statut.value
   };
 
-  if(!item.client || !item.date || !item.technicien){
-    alert("Il faut au minimum le client, la date et le technicien.");
+  if(!item.client || !item.date || !item.heure || !item.technicien){
+    alert("Il faut au minimum client, date, heure et technicien.");
     return;
   }
 
   if(item.courtoisie && item.courtoisie !== "Aucun"){
-    const conflitVehicule = interventions.find(i =>
+    const conflit = interventions.find(i =>
       i.date === item.date &&
       i.courtoisie === item.courtoisie
     );
 
-    if(conflitVehicule){
+    if(conflit){
       alert(
         "ATTENTION\n\n" +
-        "Le véhicule " + item.courtoisie + " est déjà réservé le " + item.date + ".\n\n" +
-        "Client déjà prévu : " + conflitVehicule.client + "\n\n" +
-        "Choisis un autre véhicule ou une autre date."
+        "Le véhicule " + item.courtoisie + " est déjà réservé ce jour-là.\n\n" +
+        "Client : " + conflit.client
       );
       return;
     }
@@ -260,13 +324,11 @@ function ajouter(){
   const chargeNouvelle = chargeExistante + item.duree;
 
   if(chargeNouvelle > 7){
-    const continuer = confirm(
+    if(!confirm(
       "ATTENTION\n\n" +
-      item.technicien + " est déjà chargé à " + chargeExistante + "h ce jour-là.\n" +
-      "Avec cette intervention, il passera à " + chargeNouvelle + "h.\n\n" +
-      "Veux-tu quand même enregistrer ?"
-    );
-    if(!continuer) return;
+      item.technicien + " sera chargé à " + chargeNouvelle + "h ce jour-là.\n\n" +
+      "Continuer quand même ?"
+    )) return;
   }
 
   fetch(API_URL, {
@@ -286,179 +348,39 @@ function ajouter(){
     })
   })
   .then(() => {
-    document.querySelectorAll("input, textarea").forEach(e => e.value = "");
+    fermerFormulaire();
     chargerPlanning();
   })
   .catch(() => alert("Erreur lors de l'enregistrement."));
 }
 
-function afficher(){
-  afficherSemaine();
-  afficherDispos();
-  afficherComplet();
+function ouvrirDetail(id){
+  const r = interventions.find(x => String(x.id) === String(id));
+  if(!r) return;
+
+  document.getElementById("detailContent").innerHTML = `
+    <p><b>Client :</b> ${r.client || ""}</p>
+    <p><b>Téléphone :</b> ${r.telephone || ""}</p>
+    <p><b>Véhicule :</b> ${r.vehicule || ""}</p>
+    <p><b>Date / Heure :</b> ${r.date || ""} à ${r.heure || ""}</p>
+    <p><b>Durée :</b> ${r.duree || ""}h</p>
+    <p><b>Technicien :</b> ${r.technicien || ""}</p>
+    <p><b>Courtoisie :</b> ${r.courtoisie || "Aucun"}</p>
+    <p><b>Statut :</b> ${r.statut || ""}</p>
+    <p><b>Travaux :</b><br>${r.travaux || ""}</p>
+  `;
+
+  document.getElementById("modalDetail").style.display = "flex";
 }
 
-function afficherSemaine(){
-  const lundi = lundiDeLaSemaine(dateBase);
-  const header = document.getElementById("joursHeader");
-  const body = document.getElementById("joursBody");
-
-  header.innerHTML = "";
-  body.innerHTML = "";
-
-  const fin = new Date(lundi);
-  fin.setDate(lundi.getDate()+5);
-  titreSemaine.innerText = "Semaine du " + formatFR(lundi) + " au " + formatFR(fin);
-
-  for(let i=0;i<6;i++){
-    const jour = new Date(lundi);
-    jour.setDate(lundi.getDate()+i);
-    const dateTxt = formatDate(jour);
-
-    header.innerHTML += `<th>${joursNoms[i]}<br>${formatFR(jour)}</th>`;
-
-    const taches = interventions
-      .filter(x => x.date === dateTxt)
-      .sort((a,b) => (a.heure || "").localeCompare(b.heure || ""));
-
-    let contenu = "";
-
-    if(taches.length === 0){
-      contenu = `<span class="badge">Aucune intervention</span>`;
-    } else {
-      taches.forEach(t => {
-        const charge = chargeJour(t.technicien, t.date);
-        const classe = t.statut === "En attente pièces" ? "wait" : charge > 7 ? "danger" : "ok";
-
-        contenu += `
-          <div class="task tech-${t.technicien}">
-            <b>${t.heure || "--:--"} - ${t.client}</b><br>
-            ${t.vehicule || ""}<br>
-            ${t.travaux || ""}<br>
-            <span class="badge">${t.technicien}</span>
-            <span class="badge">${t.duree}h</span>
-            <span class="badge">${t.courtoisie || "Aucun véhicule"}</span>
-            <span class="badge ${classe}">${t.statut}</span>
-            ${charge > 7 ? '<span class="badge danger">Surcharge ' + t.technicien + '</span>' : ''}
-          </div>
-        `;
-      });
-    }
-
-    body.innerHTML += `<td>${contenu}</td>`;
-  }
-}
-
-function afficherDispos(){
-  const tbody = document.getElementById("tableDispos");
-  const premiers = document.getElementById("premiersCreneaux");
-  tbody.innerHTML = "";
-  premiers.innerHTML = "";
-
-  const aujourd = formatDate(new Date());
-  const demainDate = new Date();
-  demainDate.setDate(demainDate.getDate()+1);
-  const demain = formatDate(demainDate);
-
-  let resume = "<p><b>Premiers créneaux disponibles :</b></p>";
-
-  techniciens.forEach(t => {
-    const chargeAuj = chargeJour(t, aujourd);
-    const chargeDem = chargeJour(t, demain);
-    const chargeSem = chargeSemaine(t, dateBase);
-    const premier = premierJourDisponible(t);
-
-    resume += `<span class="badge ok">${t} : ${formatFR(new Date(premier))}</span>`;
-
-    tbody.innerHTML += `
-      <tr>
-        <td><b>${t}</b></td>
-        <td><span class="badge ${classeCharge(chargeAuj)}">${chargeAuj}h / 7h</span></td>
-        <td><span class="badge ${classeCharge(chargeDem)}">${chargeDem}h / 7h</span></td>
-        <td><span class="badge">${chargeSem}h</span></td>
-        <td><span class="badge ok">${formatFR(new Date(premier))}</span></td>
-      </tr>
-    `;
-  });
-
-  premiers.innerHTML = resume;
-}
-
-function afficherComplet(){
-  const tbody = document.getElementById("tableComplet");
-  tbody.innerHTML = "";
-
-  const depart = new Date();
-  for(let i=0;i<30;i++){
-    const jour = new Date(depart);
-    jour.setDate(depart.getDate()+i);
-
-    const day = jour.getDay();
-    if(day === 0) continue;
-
-    const dateTxt = formatDate(jour);
-
-    let ligne = `<tr><td><b>${formatFR(jour)}</b></td>`;
-
-    techniciens.forEach(t => {
-      const charge = chargeJour(t, dateTxt);
-      const taches = interventions.filter(x => x.date === dateTxt && x.technicien === t);
-
-      let contenu = `<span class="badge ${classeCharge(charge)}">${charge}h / 7h</span>`;
-      taches.forEach(x => {
-        contenu += `<div class="mini">${x.client} - ${x.vehicule || ""}</div>`;
-      });
-
-      ligne += `<td>${contenu}</td>`;
-    });
-
-    const vehicules = interventions
-      .filter(x => x.date === dateTxt && x.courtoisie && x.courtoisie !== "Aucun")
-      .map(x => `<span class="badge danger">${x.courtoisie} - ${x.client}</span>`)
-      .join("");
-
-    ligne += `<td>${vehicules || '<span class="badge ok">Aucun réservé</span>'}</td>`;
-    ligne += `</tr>`;
-
-    tbody.innerHTML += ligne;
-  }
+function fermerDetail(){
+  document.getElementById("modalDetail").style.display = "none";
 }
 
 function chargeJour(tech, jour){
   return interventions
     .filter(i => i.technicien === tech && i.date === jour)
     .reduce((total, i) => total + Number(i.duree || 0), 0);
-}
-
-function chargeSemaine(tech, base){
-  const lundi = lundiDeLaSemaine(base);
-  let total = 0;
-  for(let i=0;i<6;i++){
-    const jour = new Date(lundi);
-    jour.setDate(lundi.getDate()+i);
-    total += chargeJour(tech, formatDate(jour));
-  }
-  return total;
-}
-
-function premierJourDisponible(tech){
-  const d = new Date();
-  for(let i=0;i<60;i++){
-    const jour = new Date(d);
-    jour.setDate(d.getDate()+i);
-    const day = jour.getDay();
-
-    if(day !== 0 && chargeJour(tech, formatDate(jour)) < 7){
-      return formatDate(jour);
-    }
-  }
-  return formatDate(d);
-}
-
-function classeCharge(charge){
-  if(charge >= 7) return "charge2";
-  if(charge >= 5) return "charge1";
-  return "charge0";
 }
 
 function changerSemaine(nb){
