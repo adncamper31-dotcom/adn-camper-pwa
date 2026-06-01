@@ -16,6 +16,7 @@ header{background:#111827;color:white;padding:16px;text-align:center}
 button{background:#111827;color:white;border:0;border-radius:10px;padding:10px 14px;font-weight:bold;cursor:pointer}
 button.secondary{background:#2563eb}
 button.green{background:#16a34a}
+button.danger{background:#dc2626}
 .planning{overflow-x:auto}
 table{width:100%;border-collapse:separate;border-spacing:4px}
 th{background:#111827;color:white;border-radius:10px;padding:8px;min-width:175px}
@@ -25,6 +26,7 @@ td.slot:hover{outline:2px dashed #2563eb;background:#eff6ff}
 .hour{background:#e5e7eb;font-weight:bold;text-align:center;width:70px;min-width:70px}
 .event{border-radius:10px;padding:8px;font-size:13px;margin-bottom:5px;box-shadow:0 2px 6px #0002;cursor:pointer}
 .event b{font-size:14px}
+.event-continuation{opacity:.65;font-size:12px;padding:5px}
 .Maxime{background:#bfdbfe;border-left:5px solid #2563eb}
 .Joël{background:#bbf7d0;border-left:5px solid #16a34a}
 .Guillaume{background:#fed7aa;border-left:5px solid #f97316}
@@ -96,7 +98,6 @@ textarea{min-height:90px}
       <input id="vehicule" placeholder="Véhicule">
       <input id="date" type="date">
       <input id="heure" type="time">
-
       <select id="duree"></select>
 
       <select id="technicien">
@@ -137,6 +138,7 @@ textarea{min-height:90px}
     <div id="detailContent"></div>
     <div class="actions">
       <button onclick="fermerDetail()">Fermer</button>
+      <button class="danger" onclick="supprimerRDV()">Supprimer ce RDV</button>
     </div>
   </div>
 </div>
@@ -156,6 +158,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TF
 
 let interventions = [];
 let dateBase = new Date();
+let rdvSelectionne = null;
 
 const joursNoms = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 const vehiculesCourtoisie = ["Berlingo","208","Up"];
@@ -175,13 +178,9 @@ function remplirDurees(){
     const option = document.createElement("option");
     option.value = h.toString();
 
-    if(h === 0.5){
-      option.textContent = "30 min";
-    } else if(h % 1 === 0){
-      option.textContent = h + "h";
-    } else {
-      option.textContent = Math.floor(h) + "h30";
-    }
+    if(h === 0.5) option.textContent = "30 min";
+    else if(h % 1 === 0) option.textContent = h + "h";
+    else option.textContent = Math.floor(h) + "h30";
 
     select.appendChild(option);
   }
@@ -201,9 +200,7 @@ function normaliserHeure(v){
 
   if(typeof v === "string"){
     const match = v.match(/(\d{1,2}):(\d{2})/);
-    if(match){
-      return String(match[1]).padStart(2,"0") + ":" + match[2];
-    }
+    if(match) return String(match[1]).padStart(2,"0") + ":" + match[2];
   }
 
   if(typeof v === "number"){
@@ -225,14 +222,10 @@ function normaliserDate(v){
   if(!v) return "";
 
   if(typeof v === "string"){
-    if(/^\d{4}-\d{2}-\d{2}$/.test(v)){
-      return v;
-    }
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
 
     const fr = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-    if(fr){
-      return fr[3] + "-" + fr[2] + "-" + fr[1];
-    }
+    if(fr) return fr[3] + "-" + fr[2] + "-" + fr[1];
   }
 
   const d = new Date(v);
@@ -243,6 +236,23 @@ function normaliserDate(v){
   const jour = String(d.getDate()).padStart(2,"0");
 
   return annee + "-" + mois + "-" + jour;
+}
+
+function minutesDepuisMinuit(heureTxt){
+  const parts = heureTxt.split(":");
+  return Number(parts[0]) * 60 + Number(parts[1]);
+}
+
+function rdvOccupeCreneau(rdv, heureCreneau){
+  const debut = minutesDepuisMinuit(rdv.heure);
+  const creneau = minutesDepuisMinuit(heureCreneau);
+  const fin = debut + Number(rdv.duree || 1) * 60;
+
+  return creneau >= debut && creneau < fin;
+}
+
+function estDebutRDV(rdv, heureCreneau){
+  return rdv.heure === heureCreneau;
 }
 
 function lundiDeLaSemaine(date){
@@ -276,7 +286,7 @@ function chargerPlanning(){
         telephone: x["Téléphone"],
         travaux: x.Travaux,
         technicien: x.Technicien,
-        duree: Number(x["Durée"]),
+        duree: Number(String(x["Durée"]).replace(",", ".")) || 1,
         courtoisie: x.Courtoisie,
         statut: x.Statut
       })).filter(x => x.date && x.heure);
@@ -315,23 +325,30 @@ function afficher(){
 
     dates.forEach(dateTxt => {
       const rdvs = interventions.filter(x =>
-        x.date === dateTxt &&
-        x.heure === h
+        x.date === dateTxt && rdvOccupeCreneau(x, h)
       );
 
       ligne += `<td class="slot" onclick="ouvrirDepuisCreneau('${dateTxt}','${h}')">`;
 
       rdvs.forEach(r => {
-        ligne += `
-          <div class="event ${r.technicien}" onclick="event.stopPropagation();ouvrirDetail('${r.id}')">
-            <b>${r.heure || h} - ${r.client || ""}</b><br>
-            ${r.vehicule || ""}<br>
-            ${r.travaux || ""}<br>
-            <span class="badge">${r.technicien || ""}</span>
-            <span class="badge">${formatDuree(r.duree || 1)}</span>
-            ${r.courtoisie && r.courtoisie !== "Aucun" ? `<span class="badge">🚗 ${r.courtoisie}</span>` : ""}
-          </div>
-        `;
+        if(estDebutRDV(r, h)){
+          ligne += `
+            <div class="event ${r.technicien}" onclick="event.stopPropagation();ouvrirDetail('${r.id}')">
+              <b>${r.heure} - ${r.client || ""}</b><br>
+              ${r.vehicule || ""}<br>
+              ${r.travaux || ""}<br>
+              <span class="badge">${r.technicien || ""}</span>
+              <span class="badge">${formatDuree(r.duree)}</span>
+              ${r.courtoisie && r.courtoisie !== "Aucun" ? `<span class="badge">🚗 ${r.courtoisie}</span>` : ""}
+            </div>
+          `;
+        } else {
+          ligne += `
+            <div class="event event-continuation ${r.technicien}" onclick="event.stopPropagation();ouvrirDetail('${r.id}')">
+              ↳ ${r.client || ""} — suite
+            </div>
+          `;
+        }
       });
 
       ligne += `</td>`;
@@ -409,8 +426,7 @@ function ajouter(){
     }
   }
 
-  const chargeExistante = chargeJour(item.technicien, item.date);
-  const chargeNouvelle = chargeExistante + item.duree;
+  const chargeNouvelle = chargeJour(item.technicien, item.date) + item.duree;
 
   if(chargeNouvelle > 7){
     if(!confirm(
@@ -447,6 +463,8 @@ function ouvrirDetail(id){
   const r = interventions.find(x => String(x.id) === String(id));
   if(!r) return;
 
+  rdvSelectionne = r;
+
   document.getElementById("detailContent").innerHTML = `
     <p><b>Client :</b> ${r.client || ""}</p>
     <p><b>Téléphone :</b> ${r.telephone || ""}</p>
@@ -464,6 +482,27 @@ function ouvrirDetail(id){
 
 function fermerDetail(){
   document.getElementById("modalDetail").style.display = "none";
+  rdvSelectionne = null;
+}
+
+function supprimerRDV(){
+  if(!rdvSelectionne) return;
+
+  if(!confirm("Supprimer ce RDV partout ?\n\nGoogle Sheets + Google Agenda seront mis à jour.")){
+    return;
+  }
+
+  fetch(API_URL + "?action=delete&id=" + encodeURIComponent(rdvSelectionne.id) + "&t=" + Date.now())
+    .then(r => r.json())
+    .then(res => {
+      if(res.ok){
+        fermerDetail();
+        chargerPlanning();
+      } else {
+        alert("Suppression impossible : " + (res.error || "erreur inconnue"));
+      }
+    })
+    .catch(() => alert("Erreur lors de la suppression."));
 }
 
 function ouvrirCourtoisie(){
