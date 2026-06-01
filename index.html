@@ -19,7 +19,6 @@
     th{background:#111827;color:white;border-radius:12px;padding:10px;min-width:180px}
     td{background:#f9fafb;border-radius:12px;vertical-align:top;padding:8px;min-height:400px}
     .task{background:white;border-left:6px solid #111827;border-radius:12px;padding:10px;margin-bottom:8px;box-shadow:0 2px 8px #0001;font-size:14px}
-    .task b{font-size:15px}
     .badge{display:inline-block;padding:3px 7px;border-radius:20px;background:#e5e7eb;margin:2px;font-size:12px}
     .ok{background:#dcfce7;color:#166534}
     .danger{background:#fee2e2;color:#991b1b}
@@ -33,7 +32,7 @@
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier</p>
+  <p>Vue semaine atelier synchronisée Google Sheets</p>
 </header>
 
 <div class="container">
@@ -49,12 +48,14 @@
 
   <div class="card">
     <h2>Ajouter une intervention</h2>
+
     <div class="formgrid">
       <input id="client" placeholder="Client">
       <input id="vehicule" placeholder="Véhicule">
       <input id="telephone" placeholder="Téléphone">
       <input id="date" type="date">
       <input id="heure" type="time">
+
       <select id="duree">
         <option value="1">1h</option>
         <option value="2">2h</option>
@@ -64,6 +65,7 @@
         <option value="14">2 journées</option>
         <option value="21">3 journées</option>
       </select>
+
       <select id="technicien">
         <option value="">Technicien</option>
         <option>Maxime</option>
@@ -71,6 +73,7 @@
         <option>Guillaume</option>
         <option>Gaël</option>
       </select>
+
       <select id="courtoisie">
         <option value="">Courtoisie</option>
         <option>Aucun</option>
@@ -78,6 +81,7 @@
         <option>208</option>
         <option>Up</option>
       </select>
+
       <select id="statut">
         <option>À faire</option>
         <option>En cours</option>
@@ -85,6 +89,7 @@
         <option>En attente pièces</option>
       </select>
     </div>
+
     <textarea id="travaux" placeholder="Travaux à réaliser"></textarea>
     <button onclick="ajouter()">Ajouter au planning</button>
   </div>
@@ -103,7 +108,9 @@
 </div>
 
 <script>
-let interventions = JSON.parse(localStorage.getItem("planningADN")) || [];
+const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TFDS7x4Khpeo8jNp4UhEJRjY_le2NDumuHhR-Qkvfeg0-X/exec";
+
+let interventions = [];
 let dateBase = new Date();
 
 const joursNoms = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
@@ -121,6 +128,28 @@ function formatDate(d){
 
 function formatFR(d){
   return d.toLocaleDateString("fr-FR", {day:"2-digit", month:"2-digit"});
+}
+
+function chargerPlanning(){
+  fetch(API_URL)
+    .then(r => r.json())
+    .then(data => {
+      interventions = data.map(x => ({
+        id: x.ID,
+        date: x.Date,
+        heure: x.Heure,
+        client: x.Client,
+        vehicule: x["Véhicule"],
+        telephone: x["Téléphone"],
+        travaux: x.Travaux,
+        technicien: x.Technicien,
+        duree: Number(x["Durée"]),
+        courtoisie: x.Courtoisie,
+        statut: x.Statut
+      }));
+      afficher();
+    })
+    .catch(() => alert("Impossible de charger le planning Google Sheets."));
 }
 
 function ajouter(){
@@ -143,22 +172,38 @@ function ajouter(){
     return;
   }
 
-  interventions.push(item);
-  localStorage.setItem("planningADN", JSON.stringify(interventions));
-  afficher();
-
-  document.querySelectorAll("input, textarea").forEach(e => e.value = "");
+  fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      ID: item.id,
+      Date: item.date,
+      Heure: item.heure,
+      Client: item.client,
+      "Véhicule": item.vehicule,
+      "Téléphone": item.telephone,
+      Travaux: item.travaux,
+      Technicien: item.technicien,
+      "Durée": item.duree,
+      Courtoisie: item.courtoisie,
+      Statut: item.statut
+    })
+  }).then(() => {
+    document.querySelectorAll("input, textarea").forEach(e => e.value = "");
+    chargerPlanning();
+  }).catch(() => alert("Erreur lors de l'enregistrement."));
 }
 
 function afficher(){
   const lundi = lundiDeLaSemaine(dateBase);
   const header = document.getElementById("joursHeader");
   const body = document.getElementById("joursBody");
+
   header.innerHTML = "";
   body.innerHTML = "";
 
   const fin = new Date(lundi);
   fin.setDate(lundi.getDate()+5);
+
   titreSemaine.innerText = "Semaine du " + formatFR(lundi) + " au " + formatFR(fin);
 
   for(let i=0;i<6;i++){
@@ -180,6 +225,7 @@ function afficher(){
       taches.forEach(t => {
         const charge = chargeJour(t.technicien, t.date);
         const classe = t.statut === "En attente pièces" ? "wait" : charge > 7 ? "danger" : "ok";
+
         contenu += `
           <div class="task">
             <b>${t.heure || "--:--"} - ${t.client}</b><br>
@@ -190,7 +236,6 @@ function afficher(){
             <span class="badge">${t.courtoisie || "Aucun véhicule"}</span>
             <span class="badge ${classe}">${t.statut}</span>
             ${charge > 7 ? '<span class="badge danger">Surcharge ' + t.technicien + '</span>' : ''}
-            <button class="smallbtn" onclick="supprimer(${t.id})">Supprimer</button>
           </div>
         `;
       });
@@ -204,14 +249,6 @@ function chargeJour(tech, jour){
   return interventions
     .filter(i => i.technicien === tech && i.date === jour)
     .reduce((total, i) => total + i.duree, 0);
-}
-
-function supprimer(id){
-  if(confirm("Supprimer cette intervention ?")){
-    interventions = interventions.filter(i => i.id !== id);
-    localStorage.setItem("planningADN", JSON.stringify(interventions));
-    afficher();
-  }
 }
 
 function changerSemaine(nb){
@@ -228,7 +265,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('service-worker.js');
 }
 
-afficher();
+chargerPlanning();
 </script>
 
 </body>
