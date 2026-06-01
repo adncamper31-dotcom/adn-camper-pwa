@@ -1,5 +1,4 @@
-const CACHE_NAME = "adn-camper-pwa-v1";
-
+const CACHE_NAME = "adn-camper-pwa-v2";
 const FILES_TO_CACHE = [
   "./",
   "./index.html",
