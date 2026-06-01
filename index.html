@@ -17,21 +17,43 @@ button{background:#111827;color:white;border:0;border-radius:10px;padding:10px 1
 button.secondary{background:#2563eb}
 button.green{background:#16a34a}
 button.danger{background:#dc2626}
-.planning{overflow-x:auto}
-table{width:100%;border-collapse:separate;border-spacing:4px}
-th{background:#111827;color:white;border-radius:10px;padding:8px;min-width:175px}
-td{background:#f9fafb;border-radius:8px;vertical-align:top;padding:5px;height:62px;border:1px solid #e5e7eb}
-td.slot{cursor:pointer;position:relative}
-td.slot:hover{outline:2px dashed #2563eb;background:#eff6ff}
-td.occupied{background:#f1f5f9}
-.hour{background:#e5e7eb;font-weight:bold;text-align:center;width:70px;min-width:70px}
-.event{border-radius:10px;padding:8px;font-size:13px;margin-bottom:5px;box-shadow:0 2px 6px #0002;cursor:pointer;overflow:hidden}
+.legend{display:flex;gap:10px;flex-wrap:wrap}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:5px}
+
+.agenda-wrap{overflow-x:auto}
+.agenda{
+  display:grid;
+  grid-template-columns:70px repeat(6, minmax(170px, 1fr));
+  min-width:1150px;
+  position:relative;
+}
+.agenda-header{
+  background:#111827;color:white;padding:10px;text-align:center;
+  border-radius:10px;margin:2px;font-weight:bold
+}
+.hour-cell{
+  height:48px;background:#e5e7eb;border-radius:8px;margin:2px;
+  display:flex;align-items:flex-start;justify-content:center;
+  font-weight:bold;font-size:13px;padding-top:4px;box-sizing:border-box
+}
+.day-cell{
+  height:48px;background:#f9fafb;border:1px solid #e5e7eb;
+  border-radius:8px;margin:2px;cursor:pointer;box-sizing:border-box
+}
+.day-cell:hover{outline:2px dashed #2563eb;background:#eff6ff}
+.day-column{position:relative}
+.event{
+  position:absolute;left:6px;right:6px;border-radius:10px;padding:8px;
+  font-size:13px;box-shadow:0 2px 8px #0003;cursor:pointer;z-index:5;
+  overflow:hidden;box-sizing:border-box
+}
 .event b{font-size:14px}
 .Maxime{background:#bfdbfe;border-left:5px solid #2563eb}
 .Joël{background:#bbf7d0;border-left:5px solid #16a34a}
 .Guillaume{background:#fed7aa;border-left:5px solid #f97316}
 .Gaël{background:#fecaca;border-left:5px solid #dc2626}
 .badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#e5e7eb;font-size:12px;margin:2px}
+
 .modal{display:none;position:fixed;inset:0;background:#0008;z-index:99;align-items:center;justify-content:center;padding:12px}
 .modal-content{background:white;border-radius:18px;padding:18px;max-width:850px;width:100%;box-shadow:0 10px 30px #0005;max-height:90vh;overflow:auto}
 .formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
@@ -39,16 +61,15 @@ input,select,textarea{width:100%;padding:11px;border-radius:10px;border:1px soli
 textarea{min-height:90px}
 .actions{display:flex;gap:8px;margin-top:12px}
 .actions button{flex:1}
-.legend{display:flex;gap:10px;flex-wrap:wrap}
-.dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:5px}
+
 .courtoisie-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
 .courtoisie-day{background:#f9fafb;border-radius:12px;padding:10px;border:1px solid #e5e7eb}
 .courtoisie-line{padding:8px;border-radius:10px;margin:6px 0}
 .libre{background:#dcfce7;color:#166534}
 .occupe{background:#fee2e2;color:#991b1b}
+
 @media(max-width:700px){
-  th{min-width:145px}
-  td{height:75px}
+  .agenda{grid-template-columns:60px repeat(6, 145px);min-width:930px}
   .event{font-size:12px}
 }
 </style>
@@ -58,7 +79,7 @@ textarea{min-height:90px}
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier • Google Sheets • Google Agenda</p>
+  <p>Vue semaine atelier • Blocs étirés sur la durée</p>
 </header>
 
 <div class="container">
@@ -79,11 +100,8 @@ textarea{min-height:90px}
     <span><span class="dot" style="background:#dc2626"></span>Gaël</span>
   </div>
 
-  <div class="card planning">
-    <table>
-      <thead><tr id="joursHeader"></tr></thead>
-      <tbody id="planningBody"></tbody>
-    </table>
+  <div class="card agenda-wrap">
+    <div id="agenda" class="agenda"></div>
   </div>
 
 </div>
@@ -170,6 +188,8 @@ const heures = [
   "17:00","17:30","18:00"
 ];
 
+const SLOT_HEIGHT = 52;
+
 function remplirDurees(){
   const select = document.getElementById("duree");
   select.innerHTML = "";
@@ -201,12 +221,6 @@ function normaliserHeure(v){
     const match = v.match(/(\d{1,2}):(\d{2})/);
     if(match) return String(match[1]).padStart(2,"0") + ":" + match[2];
   }
-  if(typeof v === "number"){
-    const totalMinutes = Math.round(v * 24 * 60);
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    return String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0");
-  }
   const d = new Date(v);
   if(!isNaN(d)){
     return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
@@ -234,19 +248,8 @@ function minutesDepuisMinuit(heureTxt){
   return Number(parts[0]) * 60 + Number(parts[1]);
 }
 
-function rdvOccupeCreneau(rdv, heureCreneau){
-  const debut = minutesDepuisMinuit(rdv.heure);
-  const creneau = minutesDepuisMinuit(heureCreneau);
-  const fin = debut + Number(rdv.duree || 1) * 60;
-  return creneau >= debut && creneau < fin;
-}
-
-function estDebutRDV(rdv, heureCreneau){
-  return rdv.heure === heureCreneau;
-}
-
-function slotsPourDuree(duree){
-  return Math.max(1, Math.round(Number(duree || 1) * 2));
+function indexHeure(heureTxt){
+  return heures.indexOf(heureTxt);
 }
 
 function lundiDeLaSemaine(date){
@@ -291,62 +294,86 @@ function chargerPlanning(){
 
 function afficher(){
   const lundi = lundiDeLaSemaine(dateBase);
-  const header = document.getElementById("joursHeader");
-  const body = document.getElementById("planningBody");
-
-  header.innerHTML = "<th>Heure</th>";
-  body.innerHTML = "";
+  const agenda = document.getElementById("agenda");
+  agenda.innerHTML = "";
 
   const fin = new Date(lundi);
   fin.setDate(lundi.getDate()+5);
-
   document.getElementById("titreSemaine").innerText =
     "Semaine du " + formatFR(lundi) + " au " + formatFR(fin);
 
   let dates = [];
+
+  agenda.innerHTML += `<div class="agenda-header">Heure</div>`;
 
   for(let i=0;i<6;i++){
     const jour = new Date(lundi);
     jour.setDate(lundi.getDate()+i);
     const dateTxt = formatDate(jour);
     dates.push(dateTxt);
-    header.innerHTML += `<th>${joursNoms[i]}<br>${formatFR(jour)}</th>`;
+    agenda.innerHTML += `<div class="agenda-header">${joursNoms[i]}<br>${formatFR(jour)}</div>`;
   }
 
   heures.forEach(h => {
-    let ligne = `<tr><td class="hour">${h}</td>`;
+    agenda.innerHTML += `<div class="hour-cell">${h}</div>`;
 
     dates.forEach(dateTxt => {
-      const rdvs = interventions.filter(x =>
-        x.date === dateTxt && rdvOccupeCreneau(x, h)
-      );
-
-      const aUnRdvQuiContinue = rdvs.some(r => !estDebutRDV(r,h));
-      ligne += `<td class="slot ${aUnRdvQuiContinue ? "occupied" : ""}" onclick="ouvrirDepuisCreneau('${dateTxt}','${h}')">`;
-
-      rdvs.forEach(r => {
-        if(estDebutRDV(r, h)){
-          const slots = slotsPourDuree(r.duree);
-          const hauteur = Math.max(52, slots * 67 - 8);
-
-          ligne += `
-            <div class="event ${r.technicien}" style="min-height:${hauteur}px" onclick="event.stopPropagation();ouvrirDetail('${r.id}')">
-              <b>${r.heure} - ${r.client || ""}</b><br>
-              ${r.vehicule || ""}<br>
-              ${r.travaux || ""}<br>
-              <span class="badge">${r.technicien || ""}</span>
-              <span class="badge">${formatDuree(r.duree)}</span>
-              ${r.courtoisie && r.courtoisie !== "Aucun" ? `<span class="badge">🚗 ${r.courtoisie}</span>` : ""}
-            </div>
-          `;
-        }
-      });
-
-      ligne += `</td>`;
+      agenda.innerHTML += `
+        <div class="day-cell" onclick="ouvrirDepuisCreneau('${dateTxt}','${h}')"></div>
+      `;
     });
+  });
 
-    ligne += `</tr>`;
-    body.innerHTML += ligne;
+  setTimeout(() => placerEvenements(dates), 0);
+}
+
+function placerEvenements(dates){
+  const agenda = document.getElementById("agenda");
+  const cells = agenda.querySelectorAll(".day-cell");
+
+  dates.forEach((dateTxt, dayIndex) => {
+    const rdvsJour = interventions.filter(r => r.date === dateTxt);
+
+    rdvsJour.forEach((r, ordre) => {
+      const hIndex = indexHeure(r.heure);
+      if(hIndex < 0) return;
+
+      const cellIndex = hIndex * 6 + dayIndex;
+      const cell = cells[cellIndex];
+      if(!cell) return;
+
+      const rectAgenda = agenda.getBoundingClientRect();
+      const rectCell = cell.getBoundingClientRect();
+
+      const nbSlots = Math.max(1, Math.round(Number(r.duree || 1) * 2));
+      const top = rectCell.top - rectAgenda.top + agenda.scrollTop + 2;
+      const left = rectCell.left - rectAgenda.left + agenda.scrollLeft + 2;
+      const width = rectCell.width - 4;
+      const height = Math.max(44, nbSlots * SLOT_HEIGHT - 6);
+
+      const eventDiv = document.createElement("div");
+      eventDiv.className = "event " + (r.technicien || "");
+      eventDiv.style.top = top + "px";
+      eventDiv.style.left = left + "px";
+      eventDiv.style.width = width + "px";
+      eventDiv.style.height = height + "px";
+
+      eventDiv.innerHTML = `
+        <b>${r.heure} - ${r.client || ""}</b><br>
+        ${r.vehicule || ""}<br>
+        ${r.travaux || ""}<br>
+        <span class="badge">${r.technicien || ""}</span>
+        <span class="badge">${formatDuree(r.duree)}</span>
+        ${r.courtoisie && r.courtoisie !== "Aucun" ? `<span class="badge">🚗 ${r.courtoisie}</span>` : ""}
+      `;
+
+      eventDiv.onclick = function(e){
+        e.stopPropagation();
+        ouvrirDetail(String(r.id));
+      };
+
+      agenda.appendChild(eventDiv);
+    });
   });
 }
 
@@ -397,24 +424,6 @@ function ajouter(){
   if(!item.client || !item.date || !item.heure || !item.technicien){
     alert("Il faut au minimum client, date, heure et technicien.");
     return;
-  }
-
-  if(item.courtoisie && item.courtoisie !== "Aucun"){
-    const conflit = interventions.find(i =>
-      i.date === item.date &&
-      i.courtoisie === item.courtoisie
-    );
-
-    if(conflit){
-      alert(
-        "ATTENTION\n\n" +
-        "Le véhicule " + item.courtoisie + " est déjà réservé ce jour-là.\n\n" +
-        "Client : " + conflit.client + "\n" +
-        "Véhicule : " + (conflit.vehicule || "") + "\n\n" +
-        "Choisis un autre véhicule ou une autre date."
-      );
-      return;
-    }
   }
 
   const chargeNouvelle = chargeJour(item.technicien, item.date) + item.duree;
@@ -559,6 +568,8 @@ function aujourdhui(){
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('service-worker.js');
 }
+
+window.addEventListener("resize", () => afficher());
 
 remplirDurees();
 chargerPlanning();
