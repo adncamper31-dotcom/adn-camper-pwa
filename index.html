@@ -7,99 +7,121 @@
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#111827" />
   <style>
-    body{margin:0;font-family:Arial;background:#f3f4f6;color:#111827}
+    body{margin:0;font-family:Arial;background:#eef2f7;color:#111827}
     header{background:#111827;color:white;padding:18px;text-align:center}
-    .container{padding:16px;max-width:1200px;margin:auto}
-    .card{background:white;border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 12px #0001}
-    input,select,textarea,button{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #ddd;font-size:16px}
+    .container{padding:14px;max-width:1400px;margin:auto}
+    .card{background:white;border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 4px 14px #0002}
+    input,select,textarea,button{width:100%;padding:11px;margin:5px 0;border-radius:10px;border:1px solid #d1d5db;font-size:15px;box-sizing:border-box}
     button{background:#111827;color:white;font-weight:bold;cursor:pointer}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
-    .task{border-left:6px solid #111827;background:#f9fafb;padding:12px;border-radius:10px;margin:8px 0}
-    .badge{display:inline-block;padding:4px 8px;border-radius:20px;background:#e5e7eb;margin:3px;font-size:13px}
-    .danger{background:#fee2e2;color:#991b1b}
+    .formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+    .planning{overflow-x:auto}
+    table{width:100%;border-collapse:separate;border-spacing:8px}
+    th{background:#111827;color:white;border-radius:12px;padding:10px;min-width:180px}
+    td{background:#f9fafb;border-radius:12px;vertical-align:top;padding:8px;min-height:400px}
+    .task{background:white;border-left:6px solid #111827;border-radius:12px;padding:10px;margin-bottom:8px;box-shadow:0 2px 8px #0001;font-size:14px}
+    .task b{font-size:15px}
+    .badge{display:inline-block;padding:3px 7px;border-radius:20px;background:#e5e7eb;margin:2px;font-size:12px}
     .ok{background:#dcfce7;color:#166534}
-    .warn{background:#fef3c7;color:#92400e}
+    .danger{background:#fee2e2;color:#991b1b}
+    .wait{background:#fef3c7;color:#92400e}
+    .topbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .topbar button{width:auto;padding:10px 14px}
+    .smallbtn{background:#991b1b;margin-top:8px}
   </style>
 </head>
 <body>
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Atelier • Techniciens • Véhicules de courtoisie</p>
+  <p>Vue semaine atelier</p>
 </header>
 
 <div class="container">
 
   <div class="card">
+    <div class="topbar">
+      <button onclick="changerSemaine(-7)">← Semaine précédente</button>
+      <button onclick="aujourdhui()">Aujourd'hui</button>
+      <button onclick="changerSemaine(7)">Semaine suivante →</button>
+      <strong id="titreSemaine"></strong>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Ajouter une intervention</h2>
-
-    <input id="client" placeholder="Nom du client">
-    <input id="vehicule" placeholder="Véhicule client">
-    <input id="telephone" placeholder="Téléphone">
+    <div class="formgrid">
+      <input id="client" placeholder="Client">
+      <input id="vehicule" placeholder="Véhicule">
+      <input id="telephone" placeholder="Téléphone">
+      <input id="date" type="date">
+      <input id="heure" type="time">
+      <select id="duree">
+        <option value="1">1h</option>
+        <option value="2">2h</option>
+        <option value="3">3h</option>
+        <option value="4">4h</option>
+        <option value="7">1 journée</option>
+        <option value="14">2 journées</option>
+        <option value="21">3 journées</option>
+      </select>
+      <select id="technicien">
+        <option value="">Technicien</option>
+        <option>Maxime</option>
+        <option>Joël</option>
+        <option>Guillaume</option>
+        <option>Gaël</option>
+      </select>
+      <select id="courtoisie">
+        <option value="">Courtoisie</option>
+        <option>Aucun</option>
+        <option>Berlingo</option>
+        <option>208</option>
+        <option>Up</option>
+      </select>
+      <select id="statut">
+        <option>À faire</option>
+        <option>En cours</option>
+        <option>Terminé</option>
+        <option>En attente pièces</option>
+      </select>
+    </div>
     <textarea id="travaux" placeholder="Travaux à réaliser"></textarea>
-
-    <input id="date" type="date">
-    <input id="heure" type="time">
-
-    <select id="duree">
-      <option value="1">Durée estimée : 1h</option>
-      <option value="2">2h</option>
-      <option value="3">3h</option>
-      <option value="4">4h</option>
-      <option value="7">1 journée</option>
-      <option value="14">2 journées</option>
-      <option value="21">3 journées</option>
-    </select>
-
-    <select id="technicien">
-      <option value="">Technicien</option>
-      <option>Maxime</option>
-      <option>Joël</option>
-      <option>Guillaume</option>
-      <option>Gaël</option>
-    </select>
-
-    <select id="courtoisie">
-      <option value="">Véhicule de courtoisie</option>
-      <option>Aucun</option>
-      <option>Berlingo</option>
-      <option>208</option>
-      <option>Up</option>
-    </select>
-
-    <select id="statut">
-      <option>À faire</option>
-      <option>En cours</option>
-      <option>Terminé</option>
-      <option>En attente pièces</option>
-    </select>
-
     <button onclick="ajouter()">Ajouter au planning</button>
   </div>
 
-  <div class="grid">
-    <div class="card">
-      <h2>Maxime</h2>
-      <div id="Maxime"></div>
-    </div>
-    <div class="card">
-      <h2>Joël</h2>
-      <div id="Joël"></div>
-    </div>
-    <div class="card">
-      <h2>Guillaume</h2>
-      <div id="Guillaume"></div>
-    </div>
-    <div class="card">
-      <h2>Gaël</h2>
-      <div id="Gaël"></div>
-    </div>
+  <div class="card planning">
+    <table>
+      <thead>
+        <tr id="joursHeader"></tr>
+      </thead>
+      <tbody>
+        <tr id="joursBody"></tr>
+      </tbody>
+    </table>
   </div>
 
 </div>
 
 <script>
 let interventions = JSON.parse(localStorage.getItem("planningADN")) || [];
+let dateBase = new Date();
+
+const joursNoms = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+
+function lundiDeLaSemaine(date){
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
+
+function formatDate(d){
+  return d.toISOString().split("T")[0];
+}
+
+function formatFR(d){
+  return d.toLocaleDateString("fr-FR", {day:"2-digit", month:"2-digit"});
+}
 
 function ajouter(){
   const item = {
@@ -129,28 +151,53 @@ function ajouter(){
 }
 
 function afficher(){
-  ["Maxime","Joël","Guillaume","Gaël"].forEach(t => {
-    document.getElementById(t).innerHTML = "";
-  });
+  const lundi = lundiDeLaSemaine(dateBase);
+  const header = document.getElementById("joursHeader");
+  const body = document.getElementById("joursBody");
+  header.innerHTML = "";
+  body.innerHTML = "";
 
-  interventions
-    .sort((a,b) => (a.date+a.heure).localeCompare(b.date+b.heure))
-    .forEach(i => {
-      const surcharge = chargeJour(i.technicien, i.date) > 7;
-      const div = document.createElement("div");
-      div.className = "task";
-      div.innerHTML = `
-        <strong>${i.date} ${i.heure || ""}</strong><br>
-        <b>${i.client}</b> - ${i.vehicule || ""}<br>
-        ${i.travaux || ""}<br>
-        <span class="badge">${i.duree}h</span>
-        <span class="badge">${i.statut}</span>
-        <span class="badge">${i.courtoisie || "Aucun véhicule"}</span>
-        ${surcharge ? '<span class="badge danger">Surcharge journée</span>' : '<span class="badge ok">OK</span>'}
-        <button onclick="supprimer(${i.id})">Supprimer</button>
-      `;
-      document.getElementById(i.technicien).appendChild(div);
-    });
+  const fin = new Date(lundi);
+  fin.setDate(lundi.getDate()+5);
+  titreSemaine.innerText = "Semaine du " + formatFR(lundi) + " au " + formatFR(fin);
+
+  for(let i=0;i<6;i++){
+    const jour = new Date(lundi);
+    jour.setDate(lundi.getDate()+i);
+    const dateTxt = formatDate(jour);
+
+    header.innerHTML += `<th>${joursNoms[i]}<br>${formatFR(jour)}</th>`;
+
+    const taches = interventions
+      .filter(x => x.date === dateTxt)
+      .sort((a,b) => (a.heure || "").localeCompare(b.heure || ""));
+
+    let contenu = "";
+
+    if(taches.length === 0){
+      contenu = `<span class="badge">Aucune intervention</span>`;
+    } else {
+      taches.forEach(t => {
+        const charge = chargeJour(t.technicien, t.date);
+        const classe = t.statut === "En attente pièces" ? "wait" : charge > 7 ? "danger" : "ok";
+        contenu += `
+          <div class="task">
+            <b>${t.heure || "--:--"} - ${t.client}</b><br>
+            ${t.vehicule || ""}<br>
+            ${t.travaux || ""}<br>
+            <span class="badge">${t.technicien}</span>
+            <span class="badge">${t.duree}h</span>
+            <span class="badge">${t.courtoisie || "Aucun véhicule"}</span>
+            <span class="badge ${classe}">${t.statut}</span>
+            ${charge > 7 ? '<span class="badge danger">Surcharge ' + t.technicien + '</span>' : ''}
+            <button class="smallbtn" onclick="supprimer(${t.id})">Supprimer</button>
+          </div>
+        `;
+      });
+    }
+
+    body.innerHTML += `<td>${contenu}</td>`;
+  }
 }
 
 function chargeJour(tech, jour){
@@ -165,6 +212,16 @@ function supprimer(id){
     localStorage.setItem("planningADN", JSON.stringify(interventions));
     afficher();
   }
+}
+
+function changerSemaine(nb){
+  dateBase.setDate(dateBase.getDate()+nb);
+  afficher();
+}
+
+function aujourdhui(){
+  dateBase = new Date();
+  afficher();
 }
 
 if ('serviceWorker' in navigator) {
