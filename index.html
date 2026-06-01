@@ -21,12 +21,12 @@ button.danger{background:#dc2626}
 table{width:100%;border-collapse:separate;border-spacing:4px}
 th{background:#111827;color:white;border-radius:10px;padding:8px;min-width:175px}
 td{background:#f9fafb;border-radius:8px;vertical-align:top;padding:5px;height:62px;border:1px solid #e5e7eb}
-td.slot{cursor:pointer}
+td.slot{cursor:pointer;position:relative}
 td.slot:hover{outline:2px dashed #2563eb;background:#eff6ff}
+td.occupied{background:#f1f5f9}
 .hour{background:#e5e7eb;font-weight:bold;text-align:center;width:70px;min-width:70px}
-.event{border-radius:10px;padding:8px;font-size:13px;margin-bottom:5px;box-shadow:0 2px 6px #0002;cursor:pointer}
+.event{border-radius:10px;padding:8px;font-size:13px;margin-bottom:5px;box-shadow:0 2px 6px #0002;cursor:pointer;overflow:hidden}
 .event b{font-size:14px}
-.event-continuation{opacity:.65;font-size:12px;padding:5px}
 .Maxime{background:#bfdbfe;border-left:5px solid #2563eb}
 .Joël{background:#bbf7d0;border-left:5px solid #16a34a}
 .Guillaume{background:#fed7aa;border-left:5px solid #f97316}
@@ -197,44 +197,35 @@ function formatDuree(valeur){
 
 function normaliserHeure(v){
   if(!v) return "";
-
   if(typeof v === "string"){
     const match = v.match(/(\d{1,2}):(\d{2})/);
     if(match) return String(match[1]).padStart(2,"0") + ":" + match[2];
   }
-
   if(typeof v === "number"){
     const totalMinutes = Math.round(v * 24 * 60);
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
     return String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0");
   }
-
   const d = new Date(v);
   if(!isNaN(d)){
     return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
   }
-
   return "";
 }
 
 function normaliserDate(v){
   if(!v) return "";
-
   if(typeof v === "string"){
     if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
-
     const fr = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
     if(fr) return fr[3] + "-" + fr[2] + "-" + fr[1];
   }
-
   const d = new Date(v);
   if(isNaN(d)) return "";
-
   const annee = d.getFullYear();
   const mois = String(d.getMonth()+1).padStart(2,"0");
   const jour = String(d.getDate()).padStart(2,"0");
-
   return annee + "-" + mois + "-" + jour;
 }
 
@@ -247,12 +238,15 @@ function rdvOccupeCreneau(rdv, heureCreneau){
   const debut = minutesDepuisMinuit(rdv.heure);
   const creneau = minutesDepuisMinuit(heureCreneau);
   const fin = debut + Number(rdv.duree || 1) * 60;
-
   return creneau >= debut && creneau < fin;
 }
 
 function estDebutRDV(rdv, heureCreneau){
   return rdv.heure === heureCreneau;
+}
+
+function slotsPourDuree(duree){
+  return Math.max(1, Math.round(Number(duree || 1) * 2));
 }
 
 function lundiDeLaSemaine(date){
@@ -290,7 +284,6 @@ function chargerPlanning(){
         courtoisie: x.Courtoisie,
         statut: x.Statut
       })).filter(x => x.date && x.heure);
-
       afficher();
     })
     .catch(() => alert("Impossible de charger le planning Google Sheets."));
@@ -328,24 +321,22 @@ function afficher(){
         x.date === dateTxt && rdvOccupeCreneau(x, h)
       );
 
-      ligne += `<td class="slot" onclick="ouvrirDepuisCreneau('${dateTxt}','${h}')">`;
+      const aUnRdvQuiContinue = rdvs.some(r => !estDebutRDV(r,h));
+      ligne += `<td class="slot ${aUnRdvQuiContinue ? "occupied" : ""}" onclick="ouvrirDepuisCreneau('${dateTxt}','${h}')">`;
 
       rdvs.forEach(r => {
         if(estDebutRDV(r, h)){
+          const slots = slotsPourDuree(r.duree);
+          const hauteur = Math.max(52, slots * 67 - 8);
+
           ligne += `
-            <div class="event ${r.technicien}" onclick="event.stopPropagation();ouvrirDetail('${r.id}')">
+            <div class="event ${r.technicien}" style="min-height:${hauteur}px" onclick="event.stopPropagation();ouvrirDetail('${r.id}')">
               <b>${r.heure} - ${r.client || ""}</b><br>
               ${r.vehicule || ""}<br>
               ${r.travaux || ""}<br>
               <span class="badge">${r.technicien || ""}</span>
               <span class="badge">${formatDuree(r.duree)}</span>
               ${r.courtoisie && r.courtoisie !== "Aucun" ? `<span class="badge">🚗 ${r.courtoisie}</span>` : ""}
-            </div>
-          `;
-        } else {
-          ligne += `
-            <div class="event event-continuation ${r.technicien}" onclick="event.stopPropagation();ouvrirDetail('${r.id}')">
-              ↳ ${r.client || ""} — suite
             </div>
           `;
         }
