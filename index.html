@@ -16,7 +16,6 @@ header{background:#111827;color:white;padding:16px;text-align:center}
 button{background:#111827;color:white;border:0;border-radius:10px;padding:10px 14px;font-weight:bold;cursor:pointer}
 button.secondary{background:#2563eb}
 button.green{background:#16a34a}
-button.danger{background:#dc2626}
 .planning{overflow-x:auto}
 table{width:100%;border-collapse:separate;border-spacing:4px}
 th{background:#111827;color:white;border-radius:10px;padding:8px;min-width:175px}
@@ -164,7 +163,8 @@ const vehiculesCourtoisie = ["Berlingo","208","Up"];
 const heures = [
   "08:30","09:00","09:30","10:00","10:30","11:00","11:30",
   "12:00",
-  "13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"
+  "13:30","14:00","14:30","15:00","15:30","16:00","16:30",
+  "17:00","17:30","18:00"
 ];
 
 function remplirDurees(){
@@ -191,10 +191,58 @@ function remplirDurees(){
 
 function formatDuree(valeur){
   const h = Number(valeur || 0);
-
   if(h === 0.5) return "30 min";
   if(h % 1 === 0) return h + "h";
   return Math.floor(h) + "h30";
+}
+
+function normaliserHeure(v){
+  if(!v) return "";
+
+  if(typeof v === "string"){
+    const match = v.match(/(\d{1,2}):(\d{2})/);
+    if(match){
+      return String(match[1]).padStart(2,"0") + ":" + match[2];
+    }
+  }
+
+  if(typeof v === "number"){
+    const totalMinutes = Math.round(v * 24 * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0");
+  }
+
+  const d = new Date(v);
+  if(!isNaN(d)){
+    return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+  }
+
+  return "";
+}
+
+function normaliserDate(v){
+  if(!v) return "";
+
+  if(typeof v === "string"){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)){
+      return v;
+    }
+
+    const fr = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if(fr){
+      return fr[3] + "-" + fr[2] + "-" + fr[1];
+    }
+  }
+
+  const d = new Date(v);
+  if(isNaN(d)) return "";
+
+  const annee = d.getFullYear();
+  const mois = String(d.getMonth()+1).padStart(2,"0");
+  const jour = String(d.getDate()).padStart(2,"0");
+
+  return annee + "-" + mois + "-" + jour;
 }
 
 function lundiDeLaSemaine(date){
@@ -205,29 +253,24 @@ function lundiDeLaSemaine(date){
 }
 
 function formatDate(d){
-  return d.toISOString().split("T")[0];
+  const annee = d.getFullYear();
+  const mois = String(d.getMonth()+1).padStart(2,"0");
+  const jour = String(d.getDate()).padStart(2,"0");
+  return annee + "-" + mois + "-" + jour;
 }
 
 function formatFR(d){
   return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
 }
 
-function normaliserDate(v){
-  if(!v) return "";
-  if(typeof v === "string" && v.includes("-")) return v;
-  const d = new Date(v);
-  if(isNaN(d)) return v;
-  return formatDate(d);
-}
-
 function chargerPlanning(){
-  fetch(API_URL)
+  fetch(API_URL + "?t=" + Date.now())
     .then(r => r.json())
     .then(data => {
       interventions = data.map(x => ({
         id: x.ID,
         date: normaliserDate(x.Date),
-        heure: x.Heure,
+        heure: normaliserHeure(x.Heure),
         client: x.Client,
         vehicule: x["Véhicule"],
         telephone: x["Téléphone"],
@@ -236,7 +279,8 @@ function chargerPlanning(){
         duree: Number(x["Durée"]),
         courtoisie: x.Courtoisie,
         statut: x.Statut
-      }));
+      })).filter(x => x.date && x.heure);
+
       afficher();
     })
     .catch(() => alert("Impossible de charger le planning Google Sheets."));
@@ -272,7 +316,7 @@ function afficher(){
     dates.forEach(dateTxt => {
       const rdvs = interventions.filter(x =>
         x.date === dateTxt &&
-        (x.heure || "").slice(0,5) === h
+        x.heure === h
       );
 
       ligne += `<td class="slot" onclick="ouvrirDepuisCreneau('${dateTxt}','${h}')">`;
@@ -335,7 +379,7 @@ function ajouter(){
     vehicule: vehicule.value.trim(),
     travaux: travaux.value.trim(),
     date: date.value,
-    heure: heure.value,
+    heure: normaliserHeure(heure.value),
     duree: Number(duree.value),
     technicien: technicien.value,
     courtoisie: courtoisie.value,
@@ -394,7 +438,7 @@ function ajouter(){
   })
   .then(() => {
     fermerFormulaire();
-    chargerPlanning();
+    setTimeout(chargerPlanning, 800);
   })
   .catch(() => alert("Erreur lors de l'enregistrement."));
 }
