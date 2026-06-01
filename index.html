@@ -25,14 +25,13 @@
     .wait{background:#fef3c7;color:#92400e}
     .topbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .topbar button{width:auto;padding:10px 14px}
-    .smallbtn{background:#991b1b;margin-top:8px}
   </style>
 </head>
 <body>
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier synchronisée Google Sheets</p>
+  <p>Vue semaine atelier synchronisée Google Sheets & Google Agenda</p>
 </header>
 
 <div class="container">
@@ -96,12 +95,8 @@
 
   <div class="card planning">
     <table>
-      <thead>
-        <tr id="joursHeader"></tr>
-      </thead>
-      <tbody>
-        <tr id="joursBody"></tr>
-      </tbody>
+      <thead><tr id="joursHeader"></tr></thead>
+      <tbody><tr id="joursBody"></tr></tbody>
     </table>
   </div>
 
@@ -136,7 +131,7 @@ function chargerPlanning(){
     .then(data => {
       interventions = data.map(x => ({
         id: x.ID,
-        date: x.Date,
+        date: normaliserDate(x.Date),
         heure: x.Heure,
         client: x.Client,
         vehicule: x["Véhicule"],
@@ -152,13 +147,21 @@ function chargerPlanning(){
     .catch(() => alert("Impossible de charger le planning Google Sheets."));
 }
 
+function normaliserDate(valeur){
+  if(!valeur) return "";
+  if(typeof valeur === "string" && valeur.includes("-")) return valeur;
+  const d = new Date(valeur);
+  if(isNaN(d)) return valeur;
+  return formatDate(d);
+}
+
 function ajouter(){
   const item = {
     id: Date.now(),
-    client: client.value,
-    vehicule: vehicule.value,
-    telephone: telephone.value,
-    travaux: travaux.value,
+    client: client.value.trim(),
+    vehicule: vehicule.value.trim(),
+    telephone: telephone.value.trim(),
+    travaux: travaux.value.trim(),
     date: date.value,
     heure: heure.value,
     duree: Number(duree.value),
@@ -170,6 +173,37 @@ function ajouter(){
   if(!item.client || !item.date || !item.technicien){
     alert("Il faut au minimum le client, la date et le technicien.");
     return;
+  }
+
+  if(item.courtoisie && item.courtoisie !== "Aucun"){
+    const conflitVehicule = interventions.find(i =>
+      i.date === item.date &&
+      i.courtoisie === item.courtoisie
+    );
+
+    if(conflitVehicule){
+      alert(
+        "ATTENTION\n\n" +
+        "Le véhicule " + item.courtoisie + " est déjà réservé le " + item.date + ".\n\n" +
+        "Client déjà prévu : " + conflitVehicule.client + "\n\n" +
+        "Choisis un autre véhicule ou une autre date."
+      );
+      return;
+    }
+  }
+
+  const chargeExistante = chargeJour(item.technicien, item.date);
+  const chargeNouvelle = chargeExistante + item.duree;
+
+  if(chargeNouvelle > 7){
+    const continuer = confirm(
+      "ATTENTION\n\n" +
+      item.technicien + " est déjà chargé à " + chargeExistante + "h ce jour-là.\n" +
+      "Avec cette intervention, il passera à " + chargeNouvelle + "h.\n\n" +
+      "Veux-tu quand même enregistrer ?"
+    );
+
+    if(!continuer) return;
   }
 
   fetch(API_URL, {
@@ -187,10 +221,12 @@ function ajouter(){
       Courtoisie: item.courtoisie,
       Statut: item.statut
     })
-  }).then(() => {
+  })
+  .then(() => {
     document.querySelectorAll("input, textarea").forEach(e => e.value = "");
     chargerPlanning();
-  }).catch(() => alert("Erreur lors de l'enregistrement."));
+  })
+  .catch(() => alert("Erreur lors de l'enregistrement."));
 }
 
 function afficher(){
@@ -248,7 +284,7 @@ function afficher(){
 function chargeJour(tech, jour){
   return interventions
     .filter(i => i.technicien === tech && i.date === jour)
-    .reduce((total, i) => total + i.duree, 0);
+    .reduce((total, i) => total + Number(i.duree || 0), 0);
 }
 
 function changerSemaine(nb){
