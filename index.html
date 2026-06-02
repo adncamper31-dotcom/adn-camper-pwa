@@ -66,7 +66,7 @@ textarea{min-height:90px}
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier • Pause 12h-14h prise en compte</p>
+  <p>Vue semaine atelier • SMS client • Pause 12h-14h</p>
 </header>
 
 <div class="container">
@@ -77,7 +77,6 @@ textarea{min-height:90px}
     <button onclick="changerSemaine(7)">Semaine suivante →</button>
     <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
     <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
-    <button class="orange" onclick="ouvrirOR()">Créer OR</button>
 
     <select id="filtreTech" style="width:auto" onchange="afficher()">
       <option value="Tous">Tous les techniciens</option>
@@ -112,7 +111,13 @@ textarea{min-height:90px}
     <h2 id="formTitle">Ajouter un rendez-vous</h2>
 
     <div class="formgrid">
-      <input id="client" placeholder="Client *">
+      <select id="civilite">
+        <option value="">Civilité</option>
+        <option>Monsieur</option>
+        <option>Madame</option>
+      </select>
+
+      <input id="client" placeholder="Nom client *">
       <input id="telephone" placeholder="Téléphone">
       <input id="vehicule" placeholder="Véhicule">
       <input id="date" type="date">
@@ -155,10 +160,12 @@ textarea{min-height:90px}
   <div class="modal-content">
     <h2>Détails du rendez-vous</h2>
     <div id="detailContent"></div>
+
     <div class="actions">
       <button onclick="fermerDetail()">Fermer</button>
       <button class="secondary" onclick="modifierDepuisDetail()">✏️ Modifier</button>
-      <button class="orange" onclick="ouvrirOR()">Créer OR</button>
+      <button class="green" onclick="smsConfirmation()">📲 SMS RDV</button>
+      <button class="orange" onclick="smsVehiculePret()">🚐 Véhicule prêt</button>
       <button class="danger" onclick="supprimerRDV()">Supprimer</button>
     </div>
   </div>
@@ -288,8 +295,8 @@ function prochainJourOuvre(d){
 }
 
 function ajusterHeureOuverture(heureMin){
-  if(heureMin < 510) return 510;      // avant 08h30 => 08h30
-  if(heureMin >= 720 && heureMin < 840) return 840; // 12h00-14h00 => 14h00
+  if(heureMin < 510) return 510;
+  if(heureMin >= 720 && heureMin < 840) return 840;
   return heureMin;
 }
 
@@ -358,7 +365,11 @@ function chargerPlanning(){
         technicien:x.Technicien,
         duree:Number(String(x["Durée"]).replace(",","."))||1,
         courtoisie:x.Courtoisie,
-        statut:x.Statut
+        statut:x.Statut,
+        civilite:x.Civilite || x["Civilité"] || "",
+        smsConfirmation:x.SmsConfirmation || "",
+        smsRappel:x.SmsRappel || "",
+        smsPret:x.SmsPret || ""
       })).filter(x=>x.date&&x.heure);
 
       afficher();
@@ -529,6 +540,7 @@ function ouvrirModification(id){
 
   document.getElementById("formTitle").innerText="Modifier le rendez-vous";
 
+  civilite.value=r.civilite||"";
   client.value=r.client||"";
   telephone.value=r.telephone||"";
   vehicule.value=r.vehicule||"";
@@ -549,6 +561,7 @@ function fermerFormulaire(){
 }
 
 function viderFormulaire(){
+  civilite.value="";
   client.value="";
   telephone.value="";
   vehicule.value="";
@@ -564,6 +577,7 @@ function viderFormulaire(){
 function lireForm(){
   return{
     id:modeEdition?editionId:Date.now(),
+    civilite:civilite.value,
     client:client.value.trim(),
     telephone:telephone.value.trim(),
     vehicule:vehicule.value.trim(),
@@ -593,6 +607,7 @@ function ajouter(){
     method:"POST",
     body:JSON.stringify({
       ID:item.id,
+      Civilite:item.civilite,
       Date:item.date,
       Heure:item.heure,
       Client:item.client,
@@ -626,6 +641,7 @@ function modifierRDV(){
       action:"update",
       OldID:editionId,
       ID:item.id,
+      Civilite:item.civilite,
       Date:item.date,
       Heure:item.heure,
       Client:item.client,
@@ -656,6 +672,7 @@ function deposerRDV(e,d,h){
   modeEdition=true;
   editionId=r.id;
 
+  civilite.value=r.civilite||"";
   client.value=r.client||"";
   telephone.value=r.telephone||"";
   vehicule.value=r.vehicule||"";
@@ -677,7 +694,11 @@ function ouvrirDetail(id){
 
   rdvSelectionne=r;
 
+  const smsConf = r.smsConfirmation ? "✅ SMS RDV envoyé : " + r.smsConfirmation : "❌ SMS RDV non envoyé";
+  const smsPret = r.smsPret ? "✅ SMS véhicule prêt : " + r.smsPret : "❌ SMS véhicule prêt non envoyé";
+
   detailContent.innerHTML=`
+    <p><b>Civilité :</b> ${r.civilite||""}</p>
     <p><b>Client :</b> ${r.client||""}</p>
     <p><b>Téléphone :</b> ${r.telephone||""}</p>
     <p><b>Véhicule :</b> ${r.vehicule||""}</p>
@@ -687,6 +708,9 @@ function ouvrirDetail(id){
     <p><b>Courtoisie :</b> ${r.courtoisie||"Aucun"}</p>
     <p><b>Statut :</b> ${r.statut||""}</p>
     <p><b>Travaux :</b><br>${r.travaux||""}</p>
+    <hr>
+    <p>${smsConf}</p>
+    <p>${smsPret}</p>
   `;
 
   modalDetail.style.display="flex";
@@ -720,36 +744,62 @@ function supprimerRDV(){
     .catch(()=>alert("Erreur lors de la suppression."));
 }
 
-function ouvrirOR(){
-  const r=rdvSelectionne;
-
-  if(!r){
-    alert("Clique d'abord sur un RDV.");
+function smsConfirmation(){
+  if(!rdvSelectionne){
+    alert("Aucun rendez-vous sélectionné.");
     return;
   }
 
-  const w=window.open("","_blank");
+  if(!rdvSelectionne.telephone){
+    alert("Aucun téléphone renseigné pour ce client.");
+    return;
+  }
 
-  w.document.write(`
-    <html>
-    <head>
-      <title>OR ADN Camper</title>
-    </head>
-    <body style="font-family:Arial;padding:30px">
-      <h1>ADN Camper - Ordre de réparation</h1>
-      <p><b>Client :</b> ${r.client||""}</p>
-      <p><b>Téléphone :</b> ${r.telephone||""}</p>
-      <p><b>Véhicule :</b> ${r.vehicule||""}</p>
-      <p><b>Date :</b> ${r.date||""} ${r.heure||""}</p>
-      <p><b>Technicien :</b> ${r.technicien||""}</p>
-      <p><b>Travaux :</b><br>${r.travaux||""}</p>
-      <br><br>
-      <p>Signature client :</p>
-      <div style="height:120px;border:1px solid #000"></div>
-      <script>window.print()<\/script>
-    </body>
-    </html>
-  `);
+  if(!confirm("Envoyer le SMS de confirmation RDV à " + rdvSelectionne.telephone + " ?")){
+    return;
+  }
+
+  fetch(API_URL+"?action=sms_confirm&id="+encodeURIComponent(rdvSelectionne.id)+"&t="+Date.now())
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.ok){
+        alert("SMS RDV envoyé.");
+        chargerPlanning();
+        fermerDetail();
+      }else{
+        alert("Erreur SMS : " + (data.error || "erreur inconnue"));
+      }
+    })
+    .catch(()=>alert("Erreur lors de l'envoi du SMS."));
+}
+
+function smsVehiculePret(){
+  if(!rdvSelectionne){
+    alert("Aucun rendez-vous sélectionné.");
+    return;
+  }
+
+  if(!rdvSelectionne.telephone){
+    alert("Aucun téléphone renseigné pour ce client.");
+    return;
+  }
+
+  if(!confirm("Envoyer le SMS véhicule prêt à " + rdvSelectionne.telephone + " ?")){
+    return;
+  }
+
+  fetch(API_URL+"?action=sms_ready&id="+encodeURIComponent(rdvSelectionne.id)+"&t="+Date.now())
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.ok){
+        alert("SMS véhicule prêt envoyé.");
+        chargerPlanning();
+        fermerDetail();
+      }else{
+        alert("Erreur SMS : " + (data.error || "erreur inconnue"));
+      }
+    })
+    .catch(()=>alert("Erreur lors de l'envoi du SMS."));
 }
 
 function ouvrirCourtoisie(){
