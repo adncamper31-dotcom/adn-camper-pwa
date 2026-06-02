@@ -815,46 +815,16 @@ function ouvrirSmsManuel(numero, message){
 }
 
 function appelerAppsScriptParIframe(action, id, messageAttente){
-  return new Promise((resolve)=>{
-    const iframe = document.createElement("iframe");
-    iframe.style.display = "none";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
 
-    const sep = API_URL.includes("?") ? "&" : "?";
-    iframe.src = API_URL + sep +
-      "action=" + encodeURIComponent(action) +
-      "&id=" + encodeURIComponent(id) +
-      "&t=" + Date.now();
+  const url =
+    API_URL +
+    "?action=" + encodeURIComponent(action) +
+    "&id=" + encodeURIComponent(id) +
+    "&t=" + Date.now();
 
-    let done = false;
+  window.open(url, "_blank");
 
-    iframe.onload = ()=>{
-      if(done) return;
-      done = true;
-      setTimeout(()=>{
-        try{ iframe.remove(); }catch(e){}
-        resolve(true);
-      }, 1200);
-    };
-
-    iframe.onerror = ()=>{
-      if(done) return;
-      done = true;
-      try{ iframe.remove(); }catch(e){}
-      resolve(false);
-    };
-
-    document.body.appendChild(iframe);
-
-    setTimeout(()=>{
-      if(done) return;
-      done = true;
-      try{ iframe.remove(); }catch(e){}
-      resolve(true);
-    }, 6000);
-  });
+  return Promise.resolve(true);
 }
 
 function smsConfirmation(){
