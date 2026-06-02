@@ -66,7 +66,7 @@ textarea{min-height:90px}
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier • SMS OVH • Pause 12h-14h</p>
+  <p>Vue semaine atelier • SMS client • Pause 12h-14h</p>
 </header>
 
 <div class="container">
@@ -267,7 +267,8 @@ function formatDate(d){
 function formatFR(d){
   return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
 }
-  function minutesDepuisMinuit(h){
+
+function minutesDepuisMinuit(h){
   const p=h.split(":");
   return Number(p[0])*60+Number(p[1]);
 }
@@ -297,26 +298,6 @@ function ajusterHeureOuverture(heureMin){
   if(heureMin < 510) return 510;
   if(heureMin >= 720 && heureMin < 840) return 840;
   return heureMin;
-}
-
-function formaterTelephoneSMS(numero){
-  let n = String(numero || "")
-    .trim()
-    .replace(/\s/g,"")
-    .replace(/\./g,"")
-    .replace(/-/g,"")
-    .replace(/\(/g,"")
-    .replace(/\)/g,"");
-
-  if(!n) return "";
-
-  if(n.startsWith("+33")) return n;
-  if(n.startsWith("0033")) return "+33" + n.substring(4);
-  if(n.startsWith("33")) return "+33" + n.substring(2);
-  if(n.startsWith("0")) return "+33" + n.substring(1);
-  if(n.startsWith("6") || n.startsWith("7")) return "+33" + n;
-
-  return n;
 }
 
 function genererSegments(rdv){
@@ -393,9 +374,7 @@ function chargerPlanning(){
 
       afficher();
     })
-    .catch(err=>{
-      alert("Impossible de charger le planning Google Sheets.\n\n" + err);
-    });
+    .catch(()=>alert("Impossible de charger le planning Google Sheets."));
 }
 
 function afficher(){
@@ -641,16 +620,11 @@ function ajouter(){
       Statut:item.statut
     })
   })
-  .then(r=>r.json())
-  .then(res=>{
-    if(res.ok){
-      fermerFormulaire();
-      setTimeout(chargerPlanning,800);
-    }else{
-      alert("Erreur ajout RDV :\n\n" + (res.error || JSON.stringify(res)));
-    }
+  .then(()=>{
+    fermerFormulaire();
+    setTimeout(chargerPlanning,800);
   })
-  .catch(err=>alert("Erreur lors de l'enregistrement :\n\n" + err));
+  .catch(()=>alert("Erreur lors de l'enregistrement."));
 }
 
 function modifierRDV(){
@@ -680,17 +654,12 @@ function modifierRDV(){
       Statut:item.statut
     })
   })
-  .then(r=>r.json())
-  .then(res=>{
-    if(res.ok){
-      fermerFormulaire();
-      fermerDetail();
-      setTimeout(chargerPlanning,800);
-    }else{
-      alert("Erreur modification RDV :\n\n" + (res.error || JSON.stringify(res)));
-    }
+  .then(()=>{
+    fermerFormulaire();
+    fermerDetail();
+    setTimeout(chargerPlanning,800);
   })
-  .catch(err=>alert("Erreur lors de la modification :\n\n" + err));
+  .catch(()=>alert("Erreur lors de la modification."));
 }
 
 function deposerRDV(e,d,h){
@@ -769,10 +738,123 @@ function supprimerRDV(){
         fermerDetail();
         chargerPlanning();
       }else{
-        alert("Suppression impossible :\n\n" + (res.error || JSON.stringify(res)));
+        alert("Suppression impossible");
       }
     })
-    .catch(err=>alert("Erreur lors de la suppression :\n\n" + err));
+    .catch(()=>alert("Erreur lors de la suppression."));
+}
+
+function formaterTelephoneSMS(numero){
+  let n = String(numero || "")
+    .trim()
+    .replace(/\s/g,"")
+    .replace(/\./g,"")
+    .replace(/-/g,"")
+    .replace(/\(/g,"")
+    .replace(/\)/g,"");
+
+  if(!n) return "";
+
+  if(n.startsWith("+33")) return n;
+  if(n.startsWith("0033")) return "+33" + n.substring(4);
+  if(n.startsWith("33")) return "+33" + n.substring(2);
+  if(n.startsWith("0")) return "+33" + n.substring(1);
+  if(n.startsWith("6") || n.startsWith("7")) return "+33" + n;
+
+  return n;
+}
+
+function formuleClientSMS(rdv){
+  const nom = rdv.client || "";
+  const civ = rdv.civilite || "";
+
+  if(civ === "Madame") return "Mme " + nom;
+  if(civ === "Monsieur") return "M. " + nom;
+
+  return nom;
+}
+
+function formatDateFRSMS(dateIso){
+  if(!dateIso) return "";
+  const p = String(dateIso).split("-");
+  if(p.length === 3){
+    return p[2] + "/" + p[1] + "/" + p[0];
+  }
+  return dateIso;
+}
+
+function ouvrirSmsManuel(numero, message){
+  const tel = formaterTelephoneSMS(numero);
+
+  if(!tel){
+    alert("Aucun téléphone valide pour ce client.");
+    return;
+  }
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if(isMobile){
+    window.location.href = "sms:" + tel + "?body=" + encodeURIComponent(message);
+    return;
+  }
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(message).then(()=>{
+      alert(
+        "Planning ouvert sur PC.\n\n" +
+        "Le message SMS a été copié.\n\n" +
+        "Numéro client : " + tel + "\n\n" +
+        "Tu peux le coller dans ton logiciel SMS ou l'envoyer depuis une tablette."
+      );
+    }).catch(()=>{
+      prompt("Copie ce SMS pour le client " + tel + " :", message);
+    });
+  }else{
+    prompt("Copie ce SMS pour le client " + tel + " :", message);
+  }
+}
+
+function appelerAppsScriptParIframe(action, id, messageAttente){
+  return new Promise((resolve)=>{
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+
+    const sep = API_URL.includes("?") ? "&" : "?";
+    iframe.src = API_URL + sep +
+      "action=" + encodeURIComponent(action) +
+      "&id=" + encodeURIComponent(id) +
+      "&t=" + Date.now();
+
+    let done = false;
+
+    iframe.onload = ()=>{
+      if(done) return;
+      done = true;
+      setTimeout(()=>{
+        try{ iframe.remove(); }catch(e){}
+        resolve(true);
+      }, 1200);
+    };
+
+    iframe.onerror = ()=>{
+      if(done) return;
+      done = true;
+      try{ iframe.remove(); }catch(e){}
+      resolve(false);
+    };
+
+    document.body.appendChild(iframe);
+
+    setTimeout(()=>{
+      if(done) return;
+      done = true;
+      try{ iframe.remove(); }catch(e){}
+      resolve(true);
+    }, 6000);
+  });
 }
 
 function smsConfirmation(){
@@ -786,36 +868,18 @@ function smsConfirmation(){
     return;
   }
 
-  if(!confirm("Envoyer le SMS de confirmation RDV à " + rdvSelectionne.telephone + " ?")){
+  if(!confirm("Envoyer le SMS de confirmation RDV à " + rdvSelectionne.telephone + " via OVH ?")){
     return;
   }
 
-  fetch(
-    API_URL +
-    "?action=sms_confirm&id=" +
-    encodeURIComponent(rdvSelectionne.id) +
-    "&t=" + Date.now()
-  )
-  .then(r=>r.json())
-  .then(res=>{
-    console.log("Réponse SMS RDV OVH :", res);
-
-    if(res.ok){
-      alert("SMS RDV envoyé avec succès.");
-      chargerPlanning();
-      fermerDetail();
-    }else{
-      alert(
-        "Erreur OVH :\n\n" +
-        (res.error || "Erreur inconnue") +
-        "\n\nDétail :\n" +
-        JSON.stringify(res.detail || res, null, 2)
-      );
-    }
-  })
-  .catch(err=>{
-    alert("Erreur communication Apps Script :\n\n" + err);
-  });
+  appelerAppsScriptParIframe("sms_confirm", rdvSelectionne.id, "SMS RDV")
+    .then(()=>{
+      alert("Demande d'envoi SMS RDV transmise à OVH. Le planning va se rafraîchir.");
+      setTimeout(()=>{
+        chargerPlanning();
+        fermerDetail();
+      }, 1800);
+    });
 }
 
 function smsVehiculePret(){
@@ -829,36 +893,18 @@ function smsVehiculePret(){
     return;
   }
 
-  if(!confirm("Envoyer le SMS véhicule prêt à " + rdvSelectionne.telephone + " ?")){
+  if(!confirm("Envoyer le SMS véhicule prêt à " + rdvSelectionne.telephone + " via OVH ?")){
     return;
   }
 
-  fetch(
-    API_URL +
-    "?action=sms_ready&id=" +
-    encodeURIComponent(rdvSelectionne.id) +
-    "&t=" + Date.now()
-  )
-  .then(r=>r.json())
-  .then(res=>{
-    console.log("Réponse SMS véhicule prêt OVH :", res);
-
-    if(res.ok){
-      alert("SMS véhicule prêt envoyé avec succès.");
-      chargerPlanning();
-      fermerDetail();
-    }else{
-      alert(
-        "Erreur OVH :\n\n" +
-        (res.error || "Erreur inconnue") +
-        "\n\nDétail :\n" +
-        JSON.stringify(res.detail || res, null, 2)
-      );
-    }
-  })
-  .catch(err=>{
-    alert("Erreur communication Apps Script :\n\n" + err);
-  });
+  appelerAppsScriptParIframe("sms_ready", rdvSelectionne.id, "SMS véhicule prêt")
+    .then(()=>{
+      alert("Demande d'envoi SMS véhicule prêt transmise à OVH. Le planning va se rafraîchir.");
+      setTimeout(()=>{
+        chargerPlanning();
+        fermerDetail();
+      }, 1800);
+    });
 }
 
 function ouvrirCourtoisie(){
