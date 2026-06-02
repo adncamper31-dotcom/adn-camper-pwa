@@ -820,31 +820,41 @@ function smsConfirmation(){
     return;
   }
 
-  const tel = formaterTelephoneSMS(rdvSelectionne.telephone);
-
-  if(!tel){
+  if(!rdvSelectionne.telephone){
     alert("Aucun téléphone renseigné pour ce client.");
     return;
   }
 
-  const message =
-`ADN CAMPER
-
-Bonjour ${formuleClientSMS(rdvSelectionne)},
-
-Rendez-vous confirmé le ${formatDateFRSMS(rdvSelectionne.date)} à ${rdvSelectionne.heure}.
-
-${rdvSelectionne.technicien} prendra en charge votre intervention.
-
-A bientôt.
-
-L'équipe ADN CAMPER`;
-
-  if(!confirm("Préparer le SMS de confirmation RDV à " + tel + " ?")){
+  if(!confirm("Envoyer le SMS de confirmation RDV à " + rdvSelectionne.telephone + " ?")){
     return;
   }
 
-  ouvrirSmsManuel(tel, message);
+  fetch(
+    API_URL +
+    "?action=sms_confirm&id=" +
+    encodeURIComponent(rdvSelectionne.id) +
+    "&t=" + Date.now()
+  )
+  .then(r=>r.json())
+  .then(res=>{
+    console.log("Réponse SMS RDV OVH :", res);
+
+    if(res.ok){
+      alert("SMS RDV envoyé avec succès.");
+      chargerPlanning();
+      fermerDetail();
+    }else{
+      alert(
+        "Erreur OVH :\n\n" +
+        (res.error || "Erreur inconnue") +
+        "\n\nDétail :\n" +
+        JSON.stringify(res.detail || res, null, 2)
+      );
+    }
+  })
+  .catch(err=>{
+    alert("Erreur communication Apps Script :\n\n" + err);
+  });
 }
 
 function smsVehiculePret(){
@@ -853,31 +863,41 @@ function smsVehiculePret(){
     return;
   }
 
-  const tel = formaterTelephoneSMS(rdvSelectionne.telephone);
-
-  if(!tel){
+  if(!rdvSelectionne.telephone){
     alert("Aucun téléphone renseigné pour ce client.");
     return;
   }
 
-  const message =
-`ADN CAMPER
-
-Bonjour ${formuleClientSMS(rdvSelectionne)},
-
-Votre véhicule est prêt.
-
-Vous pouvez venir récupérer votre véhicule.
-
-A bientôt.
-
-L'équipe ADN CAMPER`;
-
-  if(!confirm("Préparer le SMS véhicule prêt à " + tel + " ?")){
+  if(!confirm("Envoyer le SMS véhicule prêt à " + rdvSelectionne.telephone + " ?")){
     return;
   }
 
-  ouvrirSmsManuel(tel, message);
+  fetch(
+    API_URL +
+    "?action=sms_ready&id=" +
+    encodeURIComponent(rdvSelectionne.id) +
+    "&t=" + Date.now()
+  )
+  .then(r=>r.json())
+  .then(res=>{
+    console.log("Réponse SMS véhicule prêt OVH :", res);
+
+    if(res.ok){
+      alert("SMS véhicule prêt envoyé avec succès.");
+      chargerPlanning();
+      fermerDetail();
+    }else{
+      alert(
+        "Erreur OVH :\n\n" +
+        (res.error || "Erreur inconnue") +
+        "\n\nDétail :\n" +
+        JSON.stringify(res.detail || res, null, 2)
+      );
+    }
+  })
+  .catch(err=>{
+    alert("Erreur communication Apps Script :\n\n" + err);
+  });
 }
 
 function ouvrirCourtoisie(){
