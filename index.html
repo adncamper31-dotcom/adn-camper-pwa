@@ -118,7 +118,7 @@ textarea{min-height:90px}
       </select>
 
       <input id="client" placeholder="Nom client *">
-      <input id="telephone" placeholder="Téléphone">
+      <input id="telephone" type="tel" inputmode="tel" placeholder="Téléphone mobile client">
       <input id="vehicule" placeholder="Véhicule">
       <input id="date" type="date">
       <input id="heure" type="time">
@@ -360,7 +360,7 @@ function chargerPlanning(){
         heure:normaliserHeure(x.Heure),
         client:x.Client,
         vehicule:x["Véhicule"],
-        telephone:x["Téléphone"],
+        telephone:formaterTelephoneSMS(x["Téléphone"]),
         travaux:x.Travaux,
         technicien:x.Technicien,
         duree:Number(String(x["Durée"]).replace(",","."))||1,
@@ -579,7 +579,7 @@ function lireForm(){
     id:modeEdition?editionId:Date.now(),
     civilite:civilite.value,
     client:client.value.trim(),
-    telephone:telephone.value.trim(),
+    telephone:formaterTelephoneSMS(telephone.value),
     vehicule:vehicule.value.trim(),
     travaux:travaux.value.trim(),
     date:date.value,
@@ -744,33 +744,107 @@ function supprimerRDV(){
     .catch(()=>alert("Erreur lors de la suppression."));
 }
 
+function formaterTelephoneSMS(numero){
+  let n = String(numero || "")
+    .trim()
+    .replace(/\s/g,"")
+    .replace(/\./g,"")
+    .replace(/-/g,"")
+    .replace(/\(/g,"")
+    .replace(/\)/g,"");
+
+  if(!n) return "";
+
+  if(n.startsWith("+33")) return n;
+  if(n.startsWith("0033")) return "+33" + n.substring(4);
+  if(n.startsWith("33")) return "+33" + n.substring(2);
+  if(n.startsWith("0")) return "+33" + n.substring(1);
+  if(n.startsWith("6") || n.startsWith("7")) return "+33" + n;
+
+  return n;
+}
+
+function formuleClientSMS(rdv){
+  const nom = rdv.client || "";
+  const civ = rdv.civilite || "";
+
+  if(civ === "Madame") return "Mme " + nom;
+  if(civ === "Monsieur") return "M. " + nom;
+
+  return nom;
+}
+
+function formatDateFRSMS(dateIso){
+  if(!dateIso) return "";
+  const p = String(dateIso).split("-");
+  if(p.length === 3){
+    return p[2] + "/" + p[1] + "/" + p[0];
+  }
+  return dateIso;
+}
+
+function ouvrirSmsManuel(numero, message){
+  const tel = formaterTelephoneSMS(numero);
+
+  if(!tel){
+    alert("Aucun téléphone valide pour ce client.");
+    return;
+  }
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if(isMobile){
+    window.location.href = "sms:" + tel + "?body=" + encodeURIComponent(message);
+    return;
+  }
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(message).then(()=>{
+      alert(
+        "Planning ouvert sur PC.\n\n" +
+        "Le message SMS a été copié.\n\n" +
+        "Numéro client : " + tel + "\n\n" +
+        "Tu peux le coller dans ton logiciel SMS ou l'envoyer depuis une tablette."
+      );
+    }).catch(()=>{
+      prompt("Copie ce SMS pour le client " + tel + " :", message);
+    });
+  }else{
+    prompt("Copie ce SMS pour le client " + tel + " :", message);
+  }
+}
+
 function smsConfirmation(){
   if(!rdvSelectionne){
     alert("Aucun rendez-vous sélectionné.");
     return;
   }
 
-  if(!rdvSelectionne.telephone){
+  const tel = formaterTelephoneSMS(rdvSelectionne.telephone);
+
+  if(!tel){
     alert("Aucun téléphone renseigné pour ce client.");
     return;
   }
 
-  if(!confirm("Envoyer le SMS de confirmation RDV à " + rdvSelectionne.telephone + " ?")){
+  const message =
+`ADN CAMPER
+
+Bonjour ${formuleClientSMS(rdvSelectionne)},
+
+Rendez-vous confirmé le ${formatDateFRSMS(rdvSelectionne.date)} à ${rdvSelectionne.heure}.
+
+${rdvSelectionne.technicien} prendra en charge votre intervention.
+
+A bientôt.
+
+L'équipe ADN CAMPER`;
+
+  if(!confirm("Préparer le SMS de confirmation RDV à " + tel + " ?")){
     return;
   }
 
-  fetch(API_URL+"?action=sms_confirm&id="+encodeURIComponent(rdvSelectionne.id)+"&t="+Date.now())
-    .then(r=>r.json())
-    .then(data=>{
-      if(data.ok){
-        alert("SMS RDV envoyé.");
-        chargerPlanning();
-        fermerDetail();
-      }else{
-        alert("Erreur SMS : " + (data.error || "erreur inconnue"));
-      }
-    })
-    .catch(()=>alert("Erreur lors de l'envoi du SMS."));
+  ouvrirSmsManuel(tel, message);
 }
 
 function smsVehiculePret(){
@@ -779,27 +853,31 @@ function smsVehiculePret(){
     return;
   }
 
-  if(!rdvSelectionne.telephone){
+  const tel = formaterTelephoneSMS(rdvSelectionne.telephone);
+
+  if(!tel){
     alert("Aucun téléphone renseigné pour ce client.");
     return;
   }
 
-  if(!confirm("Envoyer le SMS véhicule prêt à " + rdvSelectionne.telephone + " ?")){
+  const message =
+`ADN CAMPER
+
+Bonjour ${formuleClientSMS(rdvSelectionne)},
+
+Votre véhicule est prêt.
+
+Vous pouvez venir récupérer votre véhicule.
+
+A bientôt.
+
+L'équipe ADN CAMPER`;
+
+  if(!confirm("Préparer le SMS véhicule prêt à " + tel + " ?")){
     return;
   }
 
-  fetch(API_URL+"?action=sms_ready&id="+encodeURIComponent(rdvSelectionne.id)+"&t="+Date.now())
-    .then(r=>r.json())
-    .then(data=>{
-      if(data.ok){
-        alert("SMS véhicule prêt envoyé.");
-        chargerPlanning();
-        fermerDetail();
-      }else{
-        alert("Erreur SMS : " + (data.error || "erreur inconnue"));
-      }
-    })
-    .catch(()=>alert("Erreur lors de l'envoi du SMS."));
+  ouvrirSmsManuel(tel, message);
 }
 
 function ouvrirCourtoisie(){
