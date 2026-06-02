@@ -66,7 +66,7 @@ textarea{min-height:90px}
 
 <header>
   <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier • SMS client • Pause 12h-14h</p>
+  <p>Vue semaine atelier • SMS OVH • Pause 12h-14h</p>
 </header>
 
 <div class="container">
@@ -267,8 +267,7 @@ function formatDate(d){
 function formatFR(d){
   return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
 }
-
-function minutesDepuisMinuit(h){
+  function minutesDepuisMinuit(h){
   const p=h.split(":");
   return Number(p[0])*60+Number(p[1]);
 }
@@ -298,6 +297,26 @@ function ajusterHeureOuverture(heureMin){
   if(heureMin < 510) return 510;
   if(heureMin >= 720 && heureMin < 840) return 840;
   return heureMin;
+}
+
+function formaterTelephoneSMS(numero){
+  let n = String(numero || "")
+    .trim()
+    .replace(/\s/g,"")
+    .replace(/\./g,"")
+    .replace(/-/g,"")
+    .replace(/\(/g,"")
+    .replace(/\)/g,"");
+
+  if(!n) return "";
+
+  if(n.startsWith("+33")) return n;
+  if(n.startsWith("0033")) return "+33" + n.substring(4);
+  if(n.startsWith("33")) return "+33" + n.substring(2);
+  if(n.startsWith("0")) return "+33" + n.substring(1);
+  if(n.startsWith("6") || n.startsWith("7")) return "+33" + n;
+
+  return n;
 }
 
 function genererSegments(rdv){
@@ -374,7 +393,9 @@ function chargerPlanning(){
 
       afficher();
     })
-    .catch(()=>alert("Impossible de charger le planning Google Sheets."));
+    .catch(err=>{
+      alert("Impossible de charger le planning Google Sheets.\n\n" + err);
+    });
 }
 
 function afficher(){
@@ -620,11 +641,16 @@ function ajouter(){
       Statut:item.statut
     })
   })
-  .then(()=>{
-    fermerFormulaire();
-    setTimeout(chargerPlanning,800);
+  .then(r=>r.json())
+  .then(res=>{
+    if(res.ok){
+      fermerFormulaire();
+      setTimeout(chargerPlanning,800);
+    }else{
+      alert("Erreur ajout RDV :\n\n" + (res.error || JSON.stringify(res)));
+    }
   })
-  .catch(()=>alert("Erreur lors de l'enregistrement."));
+  .catch(err=>alert("Erreur lors de l'enregistrement :\n\n" + err));
 }
 
 function modifierRDV(){
@@ -654,12 +680,17 @@ function modifierRDV(){
       Statut:item.statut
     })
   })
-  .then(()=>{
-    fermerFormulaire();
-    fermerDetail();
-    setTimeout(chargerPlanning,800);
+  .then(r=>r.json())
+  .then(res=>{
+    if(res.ok){
+      fermerFormulaire();
+      fermerDetail();
+      setTimeout(chargerPlanning,800);
+    }else{
+      alert("Erreur modification RDV :\n\n" + (res.error || JSON.stringify(res)));
+    }
   })
-  .catch(()=>alert("Erreur lors de la modification."));
+  .catch(err=>alert("Erreur lors de la modification :\n\n" + err));
 }
 
 function deposerRDV(e,d,h){
@@ -738,80 +769,10 @@ function supprimerRDV(){
         fermerDetail();
         chargerPlanning();
       }else{
-        alert("Suppression impossible");
+        alert("Suppression impossible :\n\n" + (res.error || JSON.stringify(res)));
       }
     })
-    .catch(()=>alert("Erreur lors de la suppression."));
-}
-
-function formaterTelephoneSMS(numero){
-  let n = String(numero || "")
-    .trim()
-    .replace(/\s/g,"")
-    .replace(/\./g,"")
-    .replace(/-/g,"")
-    .replace(/\(/g,"")
-    .replace(/\)/g,"");
-
-  if(!n) return "";
-
-  if(n.startsWith("+33")) return n;
-  if(n.startsWith("0033")) return "+33" + n.substring(4);
-  if(n.startsWith("33")) return "+33" + n.substring(2);
-  if(n.startsWith("0")) return "+33" + n.substring(1);
-  if(n.startsWith("6") || n.startsWith("7")) return "+33" + n;
-
-  return n;
-}
-
-function formuleClientSMS(rdv){
-  const nom = rdv.client || "";
-  const civ = rdv.civilite || "";
-
-  if(civ === "Madame") return "Mme " + nom;
-  if(civ === "Monsieur") return "M. " + nom;
-
-  return nom;
-}
-
-function formatDateFRSMS(dateIso){
-  if(!dateIso) return "";
-  const p = String(dateIso).split("-");
-  if(p.length === 3){
-    return p[2] + "/" + p[1] + "/" + p[0];
-  }
-  return dateIso;
-}
-
-function ouvrirSmsManuel(numero, message){
-  const tel = formaterTelephoneSMS(numero);
-
-  if(!tel){
-    alert("Aucun téléphone valide pour ce client.");
-    return;
-  }
-
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-  if(isMobile){
-    window.location.href = "sms:" + tel + "?body=" + encodeURIComponent(message);
-    return;
-  }
-
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(message).then(()=>{
-      alert(
-        "Planning ouvert sur PC.\n\n" +
-        "Le message SMS a été copié.\n\n" +
-        "Numéro client : " + tel + "\n\n" +
-        "Tu peux le coller dans ton logiciel SMS ou l'envoyer depuis une tablette."
-      );
-    }).catch(()=>{
-      prompt("Copie ce SMS pour le client " + tel + " :", message);
-    });
-  }else{
-    prompt("Copie ce SMS pour le client " + tel + " :", message);
-  }
+    .catch(err=>alert("Erreur lors de la suppression :\n\n" + err));
 }
 
 function smsConfirmation(){
