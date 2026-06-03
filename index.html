@@ -386,7 +386,7 @@ function chargerPlanning(){
 
   const script = document.createElement("script");
   script.id = callbackName;
-  script.src = API_URL + "?callback=" + encodeURIComponent(callbackName) + "&t=" + Date.now();
+  script.src = API_URL + "?callback=" + callbackName + "&t=" + Date.now();
 
   script.onerror = function(){
     alert("Impossible de charger le planning Google Sheets.");
@@ -834,56 +834,16 @@ function ouvrirSmsManuel(numero, message){
 }
 
 function appelerAppsScriptParIframe(action, id, messageAttente){
-  return new Promise((resolve)=>{
-    const callbackName = "callbackSMS_" + Date.now();
 
-    window[callbackName] = function(res){
-      cleanup();
+  const url =
+    API_URL +
+    "?action=" + encodeURIComponent(action) +
+    "&id=" + encodeURIComponent(id) +
+    "&t=" + Date.now();
 
-      if(res && res.ok){
-        resolve(true);
-      }else{
-        alert(
-          "Erreur lors de l'envoi du SMS :
+  window.open(url, "_blank");
 
-" +
-          (res && res.error ? res.error : JSON.stringify(res))
-        );
-        resolve(false);
-      }
-    };
-
-    function cleanup(){
-      delete window[callbackName];
-      const old = document.getElementById(callbackName);
-      if(old) old.remove();
-    }
-
-    const script = document.createElement("script");
-    script.id = callbackName;
-    script.src =
-      API_URL +
-      "?action=" + encodeURIComponent(action) +
-      "&id=" + encodeURIComponent(id) +
-      "&callback=" + encodeURIComponent(callbackName) +
-      "&t=" + Date.now();
-
-    script.onerror = function(){
-      cleanup();
-      alert("Impossible de contacter Apps Script pour envoyer le SMS.");
-      resolve(false);
-    };
-
-    document.body.appendChild(script);
-
-    setTimeout(function(){
-      if(window[callbackName]){
-        cleanup();
-        alert("Pas de réponse Apps Script pour l'envoi du SMS.");
-        resolve(false);
-      }
-    }, 10000);
-  });
+  return Promise.resolve(true);
 }
 
 function smsConfirmation(){
@@ -902,13 +862,12 @@ function smsConfirmation(){
   }
 
   appelerAppsScriptParIframe("sms_confirm", rdvSelectionne.id, "SMS RDV")
-    .then((ok)=>{
-      if(ok){
-        setTimeout(()=>{
-          chargerPlanning();
-          fermerDetail();
-        }, 1000);
-      }
+    .then(()=>{
+      alert("Demande d'envoi SMS RDV transmise à OVH. Le planning va se rafraîchir.");
+      setTimeout(()=>{
+        chargerPlanning();
+        fermerDetail();
+      }, 1800);
     });
 }
 
@@ -928,13 +887,12 @@ function smsVehiculePret(){
   }
 
   appelerAppsScriptParIframe("sms_ready", rdvSelectionne.id, "SMS véhicule prêt")
-    .then((ok)=>{
-      if(ok){
-        setTimeout(()=>{
-          chargerPlanning();
-          fermerDetail();
-        }, 1000);
-      }
+    .then(()=>{
+      alert("Demande d'envoi SMS véhicule prêt transmise à OVH. Le planning va se rafraîchir.");
+      setTimeout(()=>{
+        chargerPlanning();
+        fermerDetail();
+      }, 1800);
     });
 }
 
