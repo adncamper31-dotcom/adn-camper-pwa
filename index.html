@@ -833,20 +833,34 @@ function ouvrirSmsManuel(numero, message){
   }
 }
 
-function appelerAppsScriptParIframe(action, id, messageAttente){
+function appelerAppsScriptParIframe(action, id){
 
-  const url =
+  return fetch(
     API_URL +
     "?action=" + encodeURIComponent(action) +
     "&id=" + encodeURIComponent(id) +
-    "&t=" + Date.now();
+    "&t=" + Date.now()
+  )
+  .then(r => r.text())
+  .then(txt => {
 
-  window.open(url, "_blank");
+    console.log("Réponse Apps Script SMS :", txt);
 
-  return Promise.resolve(true);
+    if(
+      txt.includes('"ok":true') ||
+      txt.includes('"ok": true') ||
+      txt.includes("SMS RDV envoyé") ||
+      txt.includes("SMS véhicule prêt envoyé")
+    ){
+      return true;
+    }
+
+    throw new Error(txt);
+  });
 }
 
 function smsConfirmation(){
+
   if(!rdvSelectionne){
     alert("Aucun rendez-vous sélectionné.");
     return;
@@ -857,21 +871,31 @@ function smsConfirmation(){
     return;
   }
 
-  if(!confirm("Envoyer le SMS de confirmation RDV à " + rdvSelectionne.telephone + " via OVH ?")){
-    return;
-  }
+  appelerAppsScriptParIframe(
+    "sms_confirm",
+    rdvSelectionne.id
+  )
+  .then(()=>{
 
-  appelerAppsScriptParIframe("sms_confirm", rdvSelectionne.id, "SMS RDV")
-    .then(()=>{
-      alert("Demande d'envoi SMS RDV transmise à OVH. Le planning va se rafraîchir.");
-      setTimeout(()=>{
-        chargerPlanning();
-        fermerDetail();
-      }, 1800);
-    });
+    setTimeout(()=>{
+      chargerPlanning();
+      fermerDetail();
+    }, 800);
+
+  })
+  .catch(err=>{
+
+    alert(
+      "Erreur lors de l'envoi du SMS RDV :\n\n" +
+      err.message
+    );
+
+  });
+
 }
 
 function smsVehiculePret(){
+
   if(!rdvSelectionne){
     alert("Aucun rendez-vous sélectionné.");
     return;
@@ -882,18 +906,27 @@ function smsVehiculePret(){
     return;
   }
 
-  if(!confirm("Envoyer le SMS véhicule prêt à " + rdvSelectionne.telephone + " via OVH ?")){
-    return;
-  }
+  appelerAppsScriptParIframe(
+    "sms_ready",
+    rdvSelectionne.id
+  )
+  .then(()=>{
 
-  appelerAppsScriptParIframe("sms_ready", rdvSelectionne.id, "SMS véhicule prêt")
-    .then(()=>{
-      alert("Demande d'envoi SMS véhicule prêt transmise à OVH. Le planning va se rafraîchir.");
-      setTimeout(()=>{
-        chargerPlanning();
-        fermerDetail();
-      }, 1800);
-    });
+    setTimeout(()=>{
+      chargerPlanning();
+      fermerDetail();
+    }, 800);
+
+  })
+  .catch(err=>{
+
+    alert(
+      "Erreur lors de l'envoi du SMS véhicule prêt :\n\n" +
+      err.message
+    );
+
+  });
+
 }
 
 function ouvrirCourtoisie(){
