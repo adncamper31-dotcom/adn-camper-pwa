@@ -351,9 +351,10 @@ function genererSegments(rdv){
 }
 
 function chargerPlanning(){
-  fetch(API_URL+"?t="+Date.now())
-    .then(r=>r.json())
-    .then(data=>{
+  const callbackName = "callbackPlanning_" + Date.now();
+
+  window[callbackName] = function(data){
+    try{
       interventions=data.map(x=>({
         id:x.ID,
         date:normaliserDate(x.Date),
@@ -373,8 +374,26 @@ function chargerPlanning(){
       })).filter(x=>x.date&&x.heure);
 
       afficher();
-    })
-    .catch(()=>alert("Impossible de charger le planning Google Sheets."));
+    }catch(e){
+      alert("Erreur lecture planning : " + e);
+    }
+
+    delete window[callbackName];
+
+    const oldScript = document.getElementById(callbackName);
+    if(oldScript) oldScript.remove();
+  };
+
+  const script = document.createElement("script");
+  script.id = callbackName;
+  script.src = API_URL + "?callback=" + callbackName + "&t=" + Date.now();
+
+  script.onerror = function(){
+    alert("Impossible de charger le planning Google Sheets.");
+    delete window[callbackName];
+  };
+
+  document.body.appendChild(script);
 }
 
 function afficher(){
