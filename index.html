@@ -834,33 +834,46 @@ function ouvrirSmsManuel(numero, message){
 }
 
 function appelerAppsScriptParIframe(action, id){
+  return new Promise((resolve)=>{
+    const callbackName = "callbackSMS_" + Date.now();
 
-  return fetch(
-    API_URL +
-    "?action=" + encodeURIComponent(action) +
-    "&id=" + encodeURIComponent(id) +
-    "&t=" + Date.now()
-  )
-  .then(r => r.text())
-  .then(txt => {
+    window[callbackName] = function(res){
+      delete window[callbackName];
 
-    console.log("Réponse Apps Script SMS :", txt);
+      const script = document.getElementById(callbackName);
+      if(script) script.remove();
 
-    if(
-      txt.includes('"ok":true') ||
-      txt.includes('"ok": true') ||
-      txt.includes("SMS RDV envoyé") ||
-      txt.includes("SMS véhicule prêt envoyé")
-    ){
-      return true;
-    }
+      if(res && res.ok){
+        resolve(true);
+      }else{
+        alert(
+          "Erreur lors de l'envoi du SMS :\n\n" +
+          (res && res.error ? res.error : JSON.stringify(res))
+        );
+        resolve(false);
+      }
+    };
 
-    throw new Error(txt);
+    const script = document.createElement("script");
+    script.id = callbackName;
+    script.src =
+      API_URL +
+      "?action=" + encodeURIComponent(action) +
+      "&id=" + encodeURIComponent(id) +
+      "&callback=" + encodeURIComponent(callbackName) +
+      "&t=" + Date.now();
+
+    script.onerror = function(){
+      delete window[callbackName];
+      alert("Impossible de contacter Apps Script pour envoyer le SMS.");
+      resolve(false);
+    };
+
+    document.body.appendChild(script);
   });
 }
 
 function smsConfirmation(){
-
   if(!rdvSelectionne){
     alert("Aucun rendez-vous sélectionné.");
     return;
@@ -871,31 +884,18 @@ function smsConfirmation(){
     return;
   }
 
-  appelerAppsScriptParIframe(
-    "sms_confirm",
-    rdvSelectionne.id
-  )
-  .then(()=>{
-
-    setTimeout(()=>{
-      chargerPlanning();
-      fermerDetail();
-    }, 800);
-
-  })
-  .catch(err=>{
-
-    alert(
-      "Erreur lors de l'envoi du SMS RDV :\n\n" +
-      err.message
-    );
-
-  });
-
+  appelerAppsScriptParIframe("sms_confirm", rdvSelectionne.id)
+    .then((ok)=>{
+      if(ok){
+        setTimeout(()=>{
+          chargerPlanning();
+          fermerDetail();
+        }, 800);
+      }
+    });
 }
 
 function smsVehiculePret(){
-
   if(!rdvSelectionne){
     alert("Aucun rendez-vous sélectionné.");
     return;
@@ -906,27 +906,15 @@ function smsVehiculePret(){
     return;
   }
 
-  appelerAppsScriptParIframe(
-    "sms_ready",
-    rdvSelectionne.id
-  )
-  .then(()=>{
-
-    setTimeout(()=>{
-      chargerPlanning();
-      fermerDetail();
-    }, 800);
-
-  })
-  .catch(err=>{
-
-    alert(
-      "Erreur lors de l'envoi du SMS véhicule prêt :\n\n" +
-      err.message
-    );
-
-  });
-
+  appelerAppsScriptParIframe("sms_ready", rdvSelectionne.id)
+    .then((ok)=>{
+      if(ok){
+        setTimeout(()=>{
+          chargerPlanning();
+          fermerDetail();
+        }, 800);
+      }
+    });
 }
 
 function ouvrirCourtoisie(){
