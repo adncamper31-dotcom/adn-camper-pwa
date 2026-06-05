@@ -457,55 +457,141 @@ function rdvVisible(r){
 function placerEvenements(dates){
   const agenda=document.getElementById("agenda");
   const cells=agenda.querySelectorAll(".day-cell");
+  const heuresSansFermeture = heures.filter(h=>h!=="12:00");
+
+  let items=[];
 
   interventions.filter(rdvVisible).forEach(r=>{
     const segments=genererSegments(r).filter(s=>dates.includes(s.date));
 
     segments.forEach(seg=>{
       const dayIndex=dates.indexOf(seg.date);
-      const heuresSansFermeture = heures.filter(h=>h!=="12:00");
-      const hIndex = heuresSansFermeture.indexOf(seg.heure);
+      const hIndex=heuresSansFermeture.indexOf(seg.heure);
 
       if(dayIndex<0||hIndex<0)return;
 
       const cell=cells[hIndex*6+dayIndex];
       if(!cell)return;
 
-      const rectA=agenda.getBoundingClientRect();
-      const rectC=cell.getBoundingClientRect();
+      const startMin=minutesDepuisMinuit(seg.heure);
+      const endMin=startMin+seg.minutes;
 
-      const ev=document.createElement("div");
-      ev.className="event "+(r.technicien||"");
-      ev.draggable=true;
-      ev.ondragstart=e=>e.dataTransfer.setData("text/plain",String(r.id));
-
-      ev.style.top=(rectC.top-rectA.top+agenda.scrollTop+2)+"px";
-      ev.style.left=(rectC.left-rectA.left+agenda.scrollLeft+2)+"px";
-      ev.style.width=(rectC.width-4)+"px";
-      ev.style.height=Math.max(44,(seg.minutes/30)*SLOT_HEIGHT-6)+"px";
-
-      ev.innerHTML=`
-        <b>${seg.heure} - ${r.client||""}</b><br>
-        ${r.vehicule||""}<br>
-        ${r.travaux||""}<br>
-        <span class="badge">${r.technicien||""}</span>
-        <span class="badge">${formatDuree(r.duree)}</span>
-        ${r.courtoisie&&r.courtoisie!=="Aucun"?`<span class="badge">🚗 ${r.courtoisie}</span>`:""}<br>
-        <button class="secondary small" onclick="event.stopPropagation();ouvrirModification('${r.id}')">✏️ Modifier</button>
-      `;
-
-      ev.onclick=e=>{
-        e.stopPropagation();
-        ouvrirDetail(String(r.id));
-      };
-
-      ev.ondblclick=e=>{
-        e.stopPropagation();
-        ouvrirModification(String(r.id));
-      };
-
-      agenda.appendChild(ev);
+      items.push({
+        r:r,
+        seg:seg,
+        dayIndex:dayIndex,
+        hIndex:hIndex,
+        cell:cell,
+        startMin:startMin,
+        endMin:endMin,
+        col:0,
+        colCount:1
+      });
     });
+  });
+
+  dates.forEach((dt,dayIndex)=>{
+    const dayItems=items
+      .filter(x=>x.dayIndex===dayIndex)
+      .sort((a,b)=>a.startMin-b.startMin || b.endMin-a.endMin);
+
+    let clusters=[];
+    let currentCluster=[];
+    let clusterEnd=-1;
+
+    dayItems.forEach(item=>{
+      if(currentCluster.length===0){
+        currentCluster=[item];
+        clusterEnd=item.endMin;
+        return;
+      }
+
+      if(item.startMin < clusterEnd){
+        currentCluster.push(item);
+        clusterEnd=Math.max(clusterEnd,item.endMin);
+      }else{
+        clusters.push(currentCluster);
+        currentCluster=[item];
+        clusterEnd=item.endMin;
+      }
+    });
+
+    if(currentCluster.length>0){
+      clusters.push(currentCluster);
+    }
+
+    clusters.forEach(cluster=>{
+      let columnEnds=[];
+
+      cluster.forEach(item=>{
+        let assigned=false;
+
+        for(let c=0;c<columnEnds.length;c++){
+          if(item.startMin>=columnEnds[c]){
+            item.col=c;
+            columnEnds[c]=item.endMin;
+            assigned=true;
+            break;
+          }
+        }
+
+        if(!assigned){
+          item.col=columnEnds.length;
+          columnEnds.push(item.endMin);
+        }
+      });
+
+      const colCount=Math.max(1,columnEnds.length);
+      cluster.forEach(item=>{
+        item.colCount=colCount;
+      });
+    });
+  });
+
+  items.forEach(item=>{
+    const r=item.r;
+    const seg=item.seg;
+    const cell=item.cell;
+
+    const rectA=agenda.getBoundingClientRect();
+    const rectC=cell.getBoundingClientRect();
+
+    const gap=3;
+    const innerWidth=rectC.width-4;
+    const colWidth=innerWidth/item.colCount;
+
+    const ev=document.createElement("div");
+    ev.className="event "+(r.technicien||"");
+    ev.draggable=true;
+    ev.ondragstart=e=>e.dataTransfer.setData("text/plain",String(r.id));
+
+    ev.style.top=(rectC.top-rectA.top+agenda.scrollTop+2)+"px";
+    ev.style.left=(rectC.left-rectA.left+agenda.scrollLeft+2+(item.col*colWidth))+"px";
+    ev.style.width=Math.max(45,(colWidth-gap))+"px";
+    ev.style.height=Math.max(44,(seg.minutes/30)*SLOT_HEIGHT-6)+"px";
+    ev.style.zIndex=String(10+item.col);
+
+    ev.innerHTML=`
+      <b>${seg.heure} - ${r.client||""}</b><br>
+      ${r.vehicule||""}<br>
+      ${r.travaux||""}<br>
+      <span class="badge">${r.technicien||""}</span>
+      <span class="badge">${formatDuree(r.duree)}</span>
+      ${r.courtoisie&&r.courtoisie!=="Aucun"?`<span class="badge">🚗 ${r.courtoisie}</span>`:""}<br>
+      <button class="secondary small" onclick="event.stopPropagation();ouvrirModification('${r.id}')">✏️ Modifier</button>
+    `;
+
+    ev.onclick=e=>{
+      e.stopPropagation();
+      ouvrirDetail(String(r.id));
+    };
+
+    ev.ondblclick=e=>{
+      e.stopPropagation();
+      ouvrirModification(String(r.id));
+    };
+
+    agenda.appendChild(ev);
   });
 }
 
