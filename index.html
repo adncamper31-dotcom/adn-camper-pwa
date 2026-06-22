@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper</title>
+<title>Planning ADN Camper V3</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -18,6 +18,7 @@ button.secondary{background:#2563eb}
 button.green{background:#16a34a}
 button.orange{background:#f97316}
 button.danger{background:#dc2626}
+button.gray{background:#6b7280}
 button.small{padding:5px 8px;font-size:12px;margin-top:4px}
 select,input,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid #d1d5db;font-size:15px;box-sizing:border-box}
 textarea{min-height:90px}
@@ -37,23 +38,24 @@ textarea{min-height:90px}
 .closed-cell{height:32px;background:#f3f4f6;border:1px dashed #9ca3af;border-radius:8px;margin:2px;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:12px;font-weight:bold}
 .event{position:absolute;left:6px;right:6px;border-radius:10px;padding:8px;font-size:13px;box-shadow:0 2px 8px #0003;cursor:pointer;z-index:5;overflow:hidden;box-sizing:border-box}
 .event b{font-size:14px}
-.Maxime{background:#bfdbfe;border-left:5px solid #2563eb}
-.Joël{background:#bbf7d0;border-left:5px solid #16a34a}
-.Guillaume{background:#fed7aa;border-left:5px solid #f97316}
-.Gaël{background:#fecaca;border-left:5px solid #dc2626}
 .badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#e5e7eb;font-size:12px;margin:2px}
+.absence-badge{position:absolute;border-radius:10px;padding:8px;font-size:13px;box-sizing:border-box;background:#e9d5ff;border-left:5px solid #7c3aed;box-shadow:0 2px 8px #0002;z-index:4}
+.loan-badge{position:absolute;border-radius:10px;padding:8px;font-size:13px;box-sizing:border-box;background:#ccfbf1;border-left:5px solid #0f766e;box-shadow:0 2px 8px #0002;z-index:3}
 
 .modal{display:none;position:fixed;inset:0;background:#0008;z-index:99;align-items:center;justify-content:center;padding:12px}
-.modal-content{background:white;border-radius:18px;padding:18px;max-width:900px;width:100%;box-shadow:0 10px 30px #0005;max-height:90vh;overflow:auto}
+.modal-content{background:white;border-radius:18px;padding:18px;max-width:1000px;width:100%;box-shadow:0 10px 30px #0005;max-height:90vh;overflow:auto}
 .formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
 .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .actions button{flex:1;min-width:120px}
-
+.table{width:100%;border-collapse:collapse;margin-top:10px}
+.table th,.table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;font-size:14px}
+.table th{background:#f3f4f6}
 .courtoisie-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
 .courtoisie-day{background:#f9fafb;border-radius:12px;padding:10px;border:1px solid #e5e7eb}
 .courtoisie-line{padding:8px;border-radius:10px;margin:6px 0}
 .libre{background:#dcfce7;color:#166534}
 .occupe{background:#fee2e2;color:#991b1b}
+.info{background:#eff6ff;color:#1d4ed8;padding:10px;border-radius:12px;margin:8px 0}
 
 @media(max-width:700px){
   .agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}
@@ -65,8 +67,8 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier • SMS client • Pause 12h-14h</p>
+  <h1>Planning ADN Camper V3</h1>
+  <p>Vue semaine atelier • Salariés dynamiques • Absences • Prêts véhicules • SMS client</p>
 </header>
 
 <div class="container">
@@ -77,27 +79,19 @@ textarea{min-height:90px}
     <button onclick="changerSemaine(7)">Semaine suivante →</button>
     <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
     <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
+    <button class="orange" onclick="ouvrirPretVehicule()">🚗 Prêt véhicule</button>
+    <button class="secondary" onclick="ouvrirAbsences()">🏖️ Absences</button>
+    <button class="gray" onclick="ouvrirSalaries()">👤 Salariés</button>
 
     <select id="filtreTech" style="width:auto" onchange="afficher()">
       <option value="Tous">Tous les techniciens</option>
-      <option>Maxime</option>
-      <option>Joël</option>
-      <option>Guillaume</option>
-      <option>Gaël</option>
       <option value="Courtoisie">Avec véhicule courtoisie</option>
     </select>
 
     <strong id="titreSemaine"></strong>
   </div>
 
-  <div class="card legend">
-    <span><span class="dot" style="background:#2563eb"></span>Maxime</span>
-    <span><span class="dot" style="background:#16a34a"></span>Joël</span>
-    <span><span class="dot" style="background:#f97316"></span>Guillaume</span>
-    <span><span class="dot" style="background:#dc2626"></span>Gaël</span>
-    <span><b>Fermé :</b> 12h00 → 14h00</span>
-  </div>
-
+  <div class="card legend" id="legend"></div>
   <div class="card charge" id="chargeAtelier"></div>
 
   <div class="card agenda-wrap">
@@ -106,6 +100,7 @@ textarea{min-height:90px}
 
 </div>
 
+<!-- RDV -->
 <div id="modalForm" class="modal">
   <div class="modal-content">
     <h2 id="formTitle">Ajouter un rendez-vous</h2>
@@ -126,17 +121,10 @@ textarea{min-height:90px}
 
       <select id="technicien">
         <option value="">Technicien *</option>
-        <option>Maxime</option>
-        <option>Joël</option>
-        <option>Guillaume</option>
-        <option>Gaël</option>
       </select>
 
       <select id="courtoisie">
         <option>Aucun</option>
-        <option>Berlingo</option>
-        <option>208</option>
-        <option>Up</option>
       </select>
 
       <select id="statut">
@@ -144,6 +132,8 @@ textarea{min-height:90px}
         <option>En cours</option>
         <option>Terminé</option>
         <option>En attente pièces</option>
+        <option>Véhicule arrivé</option>
+        <option>Client prévenu</option>
       </select>
     </div>
 
@@ -156,6 +146,7 @@ textarea{min-height:90px}
   </div>
 </div>
 
+<!-- DETAIL -->
 <div id="modalDetail" class="modal">
   <div class="modal-content">
     <h2>Détails du rendez-vous</h2>
@@ -171,6 +162,7 @@ textarea{min-height:90px}
   </div>
 </div>
 
+<!-- COURTOISIE -->
 <div id="modalCourtoisie" class="modal">
   <div class="modal-content">
     <h2>🚗 Disponibilités véhicules de courtoisie</h2>
@@ -181,26 +173,121 @@ textarea{min-height:90px}
   </div>
 </div>
 
+<!-- SALARIES -->
+<div id="modalSalaries" class="modal">
+  <div class="modal-content">
+    <h2>👤 Gestion des salariés</h2>
+    <div class="info">Ajouter un salarié crée automatiquement un agenda Google nommé <b>ADN - Prénom</b>. La suppression désactive le salarié sans effacer l'historique.</div>
+
+    <div class="formgrid">
+      <input id="salNom" placeholder="Nom du salarié">
+      <input id="salCouleur" type="color" value="#6b7280">
+      <input id="salTelephone" placeholder="Téléphone interne">
+      <input id="salEmail" placeholder="Email">
+    </div>
+
+    <div class="actions">
+      <button class="green" onclick="ajouterSalarie()">➕ Ajouter salarié</button>
+      <button onclick="fermerSalaries()">Fermer</button>
+    </div>
+
+    <table class="table">
+      <thead><tr><th>Nom</th><th>Actif</th><th>Couleur</th><th>Agenda</th><th>Action</th></tr></thead>
+      <tbody id="listeSalaries"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ABSENCES -->
+<div id="modalAbsences" class="modal">
+  <div class="modal-content">
+    <h2>🏖️ Absences / Congés</h2>
+
+    <div class="formgrid">
+      <select id="absSalarie"></select>
+      <select id="absType">
+        <option>Congé payé</option>
+        <option>RTT</option>
+        <option>Maladie</option>
+        <option>Formation</option>
+        <option>Absence perso</option>
+        <option>Récupération</option>
+      </select>
+      <input id="absDebut" type="date">
+      <input id="absFin" type="date">
+      <input id="absCommentaire" placeholder="Commentaire">
+    </div>
+
+    <div class="actions">
+      <button class="green" onclick="ajouterAbsence()">➕ Ajouter absence</button>
+      <button onclick="fermerAbsences()">Fermer</button>
+    </div>
+
+    <table class="table">
+      <thead><tr><th>Salarié</th><th>Type</th><th>Du</th><th>Au</th><th>Commentaire</th><th>Action</th></tr></thead>
+      <tbody id="listeAbsences"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PRET VEHICULE -->
+<div id="modalPretVehicule" class="modal">
+  <div class="modal-content">
+    <h2>🚗 Prêt véhicule indépendant</h2>
+    <div class="info">Utilise ce formulaire quand le prêt du véhicule ne correspond pas à la durée réelle de l'intervention.</div>
+
+    <div class="formgrid">
+      <input id="pretClient" placeholder="Client">
+      <input id="pretTelephone" type="tel" placeholder="Téléphone">
+      <select id="pretVehicule"></select>
+      <input id="pretDebut" type="date">
+      <input id="pretFin" type="date">
+      <input id="pretCommentaire" placeholder="Commentaire">
+    </div>
+
+    <div class="actions">
+      <button class="green" onclick="ajouterPretVehicule()">➕ Créer prêt</button>
+      <button onclick="fermerPretVehicule()">Fermer</button>
+    </div>
+
+    <table class="table">
+      <thead><tr><th>Client</th><th>Véhicule</th><th>Du</th><th>Au</th><th>Commentaire</th><th>Action</th></tr></thead>
+      <tbody id="listePrets"></tbody>
+    </table>
+  </div>
+</div>
+
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TFDS7x4Khpeo8jNp4UhEJRjY_le2NDumuHhR-Qkvfeg0-X/exec";
 
 let interventions = [];
+let salaries = [];
+let salariesActifs = [];
+let absences = [];
+let pretsVehicules = [];
+let vehiculesCourtoisie = [];
+
 let dateBase = new Date();
 let rdvSelectionne = null;
 let modeEdition = false;
 let editionId = null;
 
 const joursNoms = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
-const techniciens = ["Maxime","Joël","Guillaume","Gaël"];
-const vehiculesCourtoisie = ["Berlingo","208","Up"];
-
 const heures = [
   "08:30","09:00","09:30","10:00","10:30","11:00","11:30",
   "12:00",
   "14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"
 ];
-
 const SLOT_HEIGHT = 52;
+
+function apiPost(payload){
+  return fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify(payload)
+  }).then(r=>r.text()).then(txt=>{
+    try{return JSON.parse(txt);}catch(e){return {ok:true, raw:txt};}
+  });
+}
 
 function remplirDurees(){
   const select = document.getElementById("duree");
@@ -216,6 +303,75 @@ function remplirDurees(){
   select.value="1";
 }
 
+function refreshSelects(){
+  const filtre=document.getElementById("filtreTech");
+  const current=filtre.value;
+  filtre.innerHTML='<option value="Tous">Tous les techniciens</option><option value="Courtoisie">Avec véhicule courtoisie</option>';
+  salariesActifs.forEach(s=>{
+    const o=document.createElement("option");
+    o.value=s.Nom;
+    o.textContent=s.Nom;
+    filtre.appendChild(o);
+  });
+  filtre.value=current || "Tous";
+
+  const tech=document.getElementById("technicien");
+  const techCurrent=tech.value;
+  tech.innerHTML='<option value="">Technicien *</option>';
+  salariesActifs.forEach(s=>{
+    const o=document.createElement("option");
+    o.value=s.Nom;
+    o.textContent=s.Nom;
+    tech.appendChild(o);
+  });
+  tech.value=techCurrent;
+
+  const absSel=document.getElementById("absSalarie");
+  absSel.innerHTML="";
+  salariesActifs.forEach(s=>{
+    const o=document.createElement("option");
+    o.value=s.Nom;
+    o.textContent=s.Nom;
+    absSel.appendChild(o);
+  });
+
+  const courtoisie=document.getElementById("courtoisie");
+  const cCur=courtoisie.value;
+  courtoisie.innerHTML='<option>Aucun</option>';
+  vehiculesCourtoisie.forEach(v=>{
+    const o=document.createElement("option");
+    o.value=v.Nom;
+    o.textContent=v.Nom;
+    courtoisie.appendChild(o);
+  });
+  courtoisie.value=cCur || "Aucun";
+
+  const pretVeh=document.getElementById("pretVehicule");
+  pretVeh.innerHTML="";
+  vehiculesCourtoisie.forEach(v=>{
+    const o=document.createElement("option");
+    o.value=v.Nom;
+    o.textContent=v.Nom;
+    pretVeh.appendChild(o);
+  });
+
+  afficherLegende();
+}
+
+function couleurTech(nom){
+  const s=salaries.find(x=>x.Nom===nom);
+  return s ? (s.Couleur || "#6b7280") : "#6b7280";
+}
+
+function afficherLegende(){
+  const box=document.getElementById("legend");
+  box.innerHTML="";
+  salariesActifs.forEach(s=>{
+    box.innerHTML += `<span><span class="dot" style="background:${s.Couleur||"#6b7280"}"></span>${s.Nom}</span>`;
+  });
+  box.innerHTML += `<span><b>Fermé :</b> 12h00 → 14h00</span><span><span class="dot" style="background:#7c3aed"></span>Absence</span><span><span class="dot" style="background:#0f766e"></span>Prêt véhicule</span>`;
+}
+
 function formatDuree(v){
   const h=Number(v||0);
   if(h===0.5)return"30 min";
@@ -225,79 +381,39 @@ function formatDuree(v){
 
 function normaliserHeure(v){
   if(!v)return"";
-
   if(typeof v==="string"){
     const m=v.match(/(\d{1,2}):(\d{2})/);
     if(m)return String(m[1]).padStart(2,"0")+":"+m[2];
   }
-
   const d=new Date(v);
-  if(!isNaN(d)){
-    return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
-  }
-
+  if(!isNaN(d)) return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
   return"";
 }
 
 function normaliserDate(v){
   if(!v)return"";
-
   if(typeof v==="string"){
     if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;
-
     const fr=v.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
     if(fr)return fr[3]+"-"+fr[2]+"-"+fr[1];
   }
-
   const d=new Date(v);
   if(isNaN(d))return"";
-
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 
-function dateObj(str){
-  const [y,m,d]=str.split("-").map(Number);
-  return new Date(y,m-1,d);
-}
+function dateObj(str){const [y,m,d]=str.split("-").map(Number);return new Date(y,m-1,d)}
+function formatDate(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function formatFR(d){return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})}
+function minutesDepuisMinuit(h){const p=h.split(":");return Number(p[0])*60+Number(p[1])}
+function heureDepuisMinutes(min){const h=Math.floor(min/60);const m=min%60;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")}
+function lundiDeLaSemaine(date){const d=new Date(date);const day=d.getDay();const diff=d.getDate()-day+(day===0?-6:1);return new Date(d.setDate(diff))}
+function prochainJourOuvre(d){const n=new Date(d);do{n.setDate(n.getDate()+1)}while(n.getDay()===0);return n}
+function ajusterHeureOuverture(heureMin){if(heureMin<510)return 510;if(heureMin>=720&&heureMin<840)return 840;return heureMin}
 
-function formatDate(d){
-  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-}
-
-function formatFR(d){
-  return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
-}
-
-function minutesDepuisMinuit(h){
-  const p=h.split(":");
-  return Number(p[0])*60+Number(p[1]);
-}
-
-function heureDepuisMinutes(min){
-  const h=Math.floor(min/60);
-  const m=min%60;
-  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
-}
-
-function lundiDeLaSemaine(date){
-  const d=new Date(date);
-  const day=d.getDay();
-  const diff=d.getDate()-day+(day===0?-6:1);
-  return new Date(d.setDate(diff));
-}
-
-function prochainJourOuvre(d){
-  const n=new Date(d);
-  do{
-    n.setDate(n.getDate()+1);
-  }while(n.getDay()===0);
-  return n;
-}
-
-function ajusterHeureOuverture(heureMin){
-  if(heureMin < 510) return 510;
-  if(heureMin >= 720 && heureMin < 840) return 840;
-  return heureMin;
+function dateDansPeriode(dateIso,debutIso,finIso){
+  const d=dateObj(dateIso), deb=dateObj(debutIso), fin=dateObj(finIso||debutIso);
+  return d>=deb && d<=fin;
 }
 
 function genererSegments(rdv){
@@ -307,55 +423,34 @@ function genererSegments(rdv){
   let heureMin=minutesDepuisMinuit(rdv.heure);
 
   while(restant>0 && segments.length<40){
+    if(jour.getDay()===0){jour=prochainJourOuvre(jour);heureMin=510;continue}
+    heureMin=ajusterHeureOuverture(heureMin);
+    if(heureMin>=1080){jour=prochainJourOuvre(jour);heureMin=510;continue}
 
-    if(jour.getDay()===0){
-      jour=prochainJourOuvre(jour);
-      heureMin=510;
-      continue;
-    }
+    let limite=heureMin<720?720:1080;
+    let dispo=limite-heureMin;
+    let pris=Math.min(restant,dispo);
 
-    heureMin = ajusterHeureOuverture(heureMin);
-
-    if(heureMin >= 1080){
-      jour=prochainJourOuvre(jour);
-      heureMin=510;
-      continue;
-    }
-
-    let limite = heureMin < 720 ? 720 : 1080;
-    let dispo = limite - heureMin;
-    let pris = Math.min(restant, dispo);
-
-    if(pris > 0){
-      segments.push({
-        id:rdv.id,
-        rdv:rdv,
-        date:formatDate(jour),
-        heure:heureDepuisMinutes(heureMin),
-        minutes:pris
-      });
-
-      restant -= pris;
-      heureMin += pris;
-    } else {
-      if(heureMin < 840){
-        heureMin = 840;
-      } else {
-        jour=prochainJourOuvre(jour);
-        heureMin=510;
-      }
+    if(pris>0){
+      segments.push({id:rdv.id,rdv:rdv,date:formatDate(jour),heure:heureDepuisMinutes(heureMin),minutes:pris});
+      restant-=pris;
+      heureMin+=pris;
+    }else{
+      if(heureMin<840) heureMin=840;
+      else {jour=prochainJourOuvre(jour);heureMin=510}
     }
   }
-
   return segments;
 }
 
 function chargerPlanning(){
-  const callbackName = "callbackPlanning_" + Date.now();
+  const callbackName="callbackPlanning_"+Date.now();
 
-  window[callbackName] = function(data){
+  window[callbackName]=function(data){
     try{
-      interventions=data.map(x=>({
+      const payload = Array.isArray(data) ? {interventions:data} : data;
+
+      interventions=(payload.interventions||[]).map(x=>({
         id:x.ID,
         date:normaliserDate(x.Date),
         heure:normaliserHeure(x.Heure),
@@ -373,26 +468,28 @@ function chargerPlanning(){
         smsPret:x.SmsPret || ""
       })).filter(x=>x.date&&x.heure);
 
+      salaries = payload.salaries || [];
+      salariesActifs = payload.salariesActifs || salaries.filter(s=>String(s.Actif).toUpperCase()==="OUI");
+      absences = payload.absences || [];
+      pretsVehicules = payload.prets || [];
+      vehiculesCourtoisie = payload.vehiculesCourtoisie || [];
+
+      refreshSelects();
       afficher();
+      afficherTableauxAdmin();
     }catch(e){
       alert("Erreur lecture planning : " + e);
     }
 
     delete window[callbackName];
-
-    const oldScript = document.getElementById(callbackName);
+    const oldScript=document.getElementById(callbackName);
     if(oldScript) oldScript.remove();
   };
 
-  const script = document.createElement("script");
-  script.id = callbackName;
-  script.src = API_URL + "?callback=" + callbackName + "&t=" + Date.now();
-
-  script.onerror = function(){
-    alert("Impossible de charger le planning Google Sheets.");
-    delete window[callbackName];
-  };
-
+  const script=document.createElement("script");
+  script.id=callbackName;
+  script.src=API_URL+"?callback="+callbackName+"&t="+Date.now();
+  script.onerror=function(){alert("Impossible de charger le planning Google Sheets.");delete window[callbackName]};
   document.body.appendChild(script);
 }
 
@@ -401,36 +498,26 @@ function afficher(){
   const agenda=document.getElementById("agenda");
   agenda.innerHTML="";
 
-  const fin=new Date(lundi);
-  fin.setDate(lundi.getDate()+5);
-
+  const fin=new Date(lundi);fin.setDate(lundi.getDate()+5);
   document.getElementById("titreSemaine").innerText="Semaine du "+formatFR(lundi)+" au "+formatFR(fin);
 
   let dates=[];
-
   agenda.innerHTML+=`<div class="agenda-header">Heure</div>`;
 
   for(let i=0;i<6;i++){
-    const j=new Date(lundi);
-    j.setDate(lundi.getDate()+i);
-
-    const dt=formatDate(j);
-    dates.push(dt);
-
+    const j=new Date(lundi);j.setDate(lundi.getDate()+i);
+    const dt=formatDate(j);dates.push(dt);
     agenda.innerHTML+=`<div class="agenda-header">${joursNoms[i]}<br>${formatFR(j)}</div>`;
   }
 
   heures.forEach(h=>{
     if(h==="12:00"){
       agenda.innerHTML+=`<div class="hour-cell">12h-14h</div>`;
-      dates.forEach(()=>{
-        agenda.innerHTML+=`<div class="closed-cell">FERMÉ</div>`;
-      });
+      dates.forEach(()=>{agenda.innerHTML+=`<div class="closed-cell">FERMÉ</div>`});
       return;
     }
 
     agenda.innerHTML+=`<div class="hour-cell">${h}</div>`;
-
     dates.forEach(dt=>{
       agenda.innerHTML+=`
         <div class="day-cell"
@@ -442,126 +529,71 @@ function afficher(){
   });
 
   afficherCharge(dates);
-  setTimeout(()=>placerEvenements(dates),0);
+  setTimeout(()=>{placerEvenements(dates);placerAbsences(dates);placerPrets(dates)},0);
 }
 
 function rdvVisible(r){
   const f=document.getElementById("filtreTech").value;
-
   if(f==="Tous")return true;
   if(f==="Courtoisie")return r.courtoisie&&r.courtoisie!=="Aucun";
-
   return r.technicien===f;
 }
 
 function placerEvenements(dates){
   const agenda=document.getElementById("agenda");
   const cells=agenda.querySelectorAll(".day-cell");
-  const heuresSansFermeture = heures.filter(h=>h!=="12:00");
-
+  const heuresSansFermeture=heures.filter(h=>h!=="12:00");
   let items=[];
 
   interventions.filter(rdvVisible).forEach(r=>{
     const segments=genererSegments(r).filter(s=>dates.includes(s.date));
-
     segments.forEach(seg=>{
       const dayIndex=dates.indexOf(seg.date);
       const hIndex=heuresSansFermeture.indexOf(seg.heure);
-
       if(dayIndex<0||hIndex<0)return;
-
       const cell=cells[hIndex*6+dayIndex];
       if(!cell)return;
 
       const startMin=minutesDepuisMinuit(seg.heure);
       const endMin=startMin+seg.minutes;
-
-      items.push({
-        r:r,
-        seg:seg,
-        dayIndex:dayIndex,
-        hIndex:hIndex,
-        cell:cell,
-        startMin:startMin,
-        endMin:endMin,
-        col:0,
-        colCount:1
-      });
+      items.push({r,seg,dayIndex,hIndex,cell,startMin,endMin,col:0,colCount:1});
     });
   });
 
   dates.forEach((dt,dayIndex)=>{
-    const dayItems=items
-      .filter(x=>x.dayIndex===dayIndex)
-      .sort((a,b)=>a.startMin-b.startMin || b.endMin-a.endMin);
-
-    let clusters=[];
-    let currentCluster=[];
-    let clusterEnd=-1;
+    const dayItems=items.filter(x=>x.dayIndex===dayIndex).sort((a,b)=>a.startMin-b.startMin || b.endMin-a.endMin);
+    let clusters=[],currentCluster=[],clusterEnd=-1;
 
     dayItems.forEach(item=>{
-      if(currentCluster.length===0){
-        currentCluster=[item];
-        clusterEnd=item.endMin;
-        return;
-      }
-
-      if(item.startMin < clusterEnd){
-        currentCluster.push(item);
-        clusterEnd=Math.max(clusterEnd,item.endMin);
-      }else{
-        clusters.push(currentCluster);
-        currentCluster=[item];
-        clusterEnd=item.endMin;
-      }
+      if(currentCluster.length===0){currentCluster=[item];clusterEnd=item.endMin;return}
+      if(item.startMin<clusterEnd){currentCluster.push(item);clusterEnd=Math.max(clusterEnd,item.endMin)}
+      else{clusters.push(currentCluster);currentCluster=[item];clusterEnd=item.endMin}
     });
-
-    if(currentCluster.length>0){
-      clusters.push(currentCluster);
-    }
+    if(currentCluster.length>0)clusters.push(currentCluster);
 
     clusters.forEach(cluster=>{
       let columnEnds=[];
-
       cluster.forEach(item=>{
         let assigned=false;
-
         for(let c=0;c<columnEnds.length;c++){
-          if(item.startMin>=columnEnds[c]){
-            item.col=c;
-            columnEnds[c]=item.endMin;
-            assigned=true;
-            break;
-          }
+          if(item.startMin>=columnEnds[c]){item.col=c;columnEnds[c]=item.endMin;assigned=true;break}
         }
-
-        if(!assigned){
-          item.col=columnEnds.length;
-          columnEnds.push(item.endMin);
-        }
+        if(!assigned){item.col=columnEnds.length;columnEnds.push(item.endMin)}
       });
-
       const colCount=Math.max(1,columnEnds.length);
-      cluster.forEach(item=>{
-        item.colCount=colCount;
-      });
+      cluster.forEach(item=>item.colCount=colCount);
     });
   });
 
   items.forEach(item=>{
-    const r=item.r;
-    const seg=item.seg;
-    const cell=item.cell;
-
-    const rectA=agenda.getBoundingClientRect();
-    const rectC=cell.getBoundingClientRect();
-
-    const gap=3;
-    const innerWidth=rectC.width-4;
-    const colWidth=innerWidth/item.colCount;
+    const r=item.r, seg=item.seg, cell=item.cell;
+    const rectA=agenda.getBoundingClientRect(), rectC=cell.getBoundingClientRect();
+    const gap=3, innerWidth=rectC.width-4, colWidth=innerWidth/item.colCount;
 
     const ev=document.createElement("div");
-    ev.className="event "+(r.technicien||"");
+    ev.className="event";
+    ev.style.background=hexToPastel(couleurTech(r.technicien));
+    ev.style.borderLeft="5px solid "+couleurTech(r.technicien);
     ev.draggable=true;
     ev.ondragstart=e=>e.dataTransfer.setData("text/plain",String(r.id));
 
@@ -581,103 +613,83 @@ function placerEvenements(dates){
       <button class="secondary small" onclick="event.stopPropagation();ouvrirModification('${r.id}')">✏️ Modifier</button>
     `;
 
-    ev.onclick=e=>{
-      e.stopPropagation();
-      ouvrirDetail(String(r.id));
-    };
-
-    ev.ondblclick=e=>{
-      e.stopPropagation();
-      ouvrirModification(String(r.id));
-    };
-
+    ev.onclick=e=>{e.stopPropagation();ouvrirDetail(String(r.id))};
+    ev.ondblclick=e=>{e.stopPropagation();ouvrirModification(String(r.id))};
     agenda.appendChild(ev);
   });
+}
+
+function placerAbsences(dates){
+  const agenda=document.getElementById("agenda");
+  const cells=agenda.querySelectorAll(".day-cell");
+  const heuresSansFermeture=heures.filter(h=>h!=="12:00");
+
+  absences.forEach(a=>{
+    dates.forEach((dt,dayIndex)=>{
+      if(!dateDansPeriode(dt,a.DateDebut,a.DateFin)) return;
+      const cell=cells[0*6+dayIndex];
+      if(!cell)return;
+
+      const rectA=agenda.getBoundingClientRect(), rectC=cell.getBoundingClientRect();
+      const ev=document.createElement("div");
+      ev.className="absence-badge";
+      ev.style.top=(rectC.top-rectA.top+agenda.scrollTop+2)+"px";
+      ev.style.left=(rectC.left-rectA.left+agenda.scrollLeft+6)+"px";
+      ev.style.width=(rectC.width-12)+"px";
+      ev.style.height=(heuresSansFermeture.length*SLOT_HEIGHT-12)+"px";
+      ev.innerHTML=`<b>🏖️ ${a.Salarie}</b><br>${a.Type||"Absence"}<br>${a.Commentaire||""}`;
+      agenda.appendChild(ev);
+    });
+  });
+}
+
+function placerPrets(dates){
+  const agenda=document.getElementById("agenda");
+  const cells=agenda.querySelectorAll(".day-cell");
+
+  pretsVehicules.forEach(p=>{
+    dates.forEach((dt,dayIndex)=>{
+      if(!dateDansPeriode(dt,p.DateDebut,p.DateFin)) return;
+      const cell=cells[1*6+dayIndex];
+      if(!cell)return;
+
+      const rectA=agenda.getBoundingClientRect(), rectC=cell.getBoundingClientRect();
+      const ev=document.createElement("div");
+      ev.className="loan-badge";
+      ev.style.top=(rectC.top-rectA.top+agenda.scrollTop+2)+"px";
+      ev.style.left=(rectC.left-rectA.left+agenda.scrollLeft+12)+"px";
+      ev.style.width=(rectC.width-24)+"px";
+      ev.style.height="60px";
+      ev.innerHTML=`<b>🚗 ${p.Vehicule}</b><br>${p.Client||""}`;
+      agenda.appendChild(ev);
+    });
+  });
+}
+
+function hexToPastel(hex){
+  if(!hex || !hex.startsWith("#")) return "#e5e7eb";
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgb(${Math.round((r+255)/2)},${Math.round((g+255)/2)},${Math.round((b+255)/2)})`;
 }
 
 function afficherCharge(dates){
   const box=document.getElementById("chargeAtelier");
   const auj=dates[0];
-
   box.innerHTML="";
 
-  techniciens.forEach(t=>{
-    const h=chargeJour(t,auj);
-    const cls=h>=7?"full":h>=5?"warn":"ok";
-
-    box.innerHTML+=`<div class="chargebox ${cls}">${t} : ${formatDuree(h)} / 7h</div>`;
+  salariesActifs.forEach(s=>{
+    const h=chargeJour(s.Nom,auj);
+    const absent=absences.some(a=>a.Salarie===s.Nom && dateDansPeriode(auj,a.DateDebut,a.DateFin));
+    const cls=absent?"full":h>=7?"full":h>=5?"warn":"ok";
+    box.innerHTML+=`<div class="chargebox ${cls}">${s.Nom} : ${absent?"Absent":formatDuree(h)+" / 7h"}</div>`;
   });
 }
 
-function ouvrirDepuisCreneau(d,h){
-  modeEdition=false;
-  editionId=null;
-
-  document.getElementById("formTitle").innerText="Ajouter un rendez-vous";
-
-  viderFormulaire();
-
-  date.value=d;
-  heure.value=h;
-
-  modalForm.style.display="flex";
-}
-
-function ouvrirFormulaire(){
-  modeEdition=false;
-  editionId=null;
-
-  document.getElementById("formTitle").innerText="Ajouter un rendez-vous";
-
-  viderFormulaire();
-
-  modalForm.style.display="flex";
-}
-
-function ouvrirModification(id){
-  const r=interventions.find(x=>String(x.id)===String(id));
-
-  if(!r)return;
-
-  modeEdition=true;
-  editionId=r.id;
-  rdvSelectionne=r;
-
-  document.getElementById("formTitle").innerText="Modifier le rendez-vous";
-
-  civilite.value=r.civilite||"";
-  client.value=r.client||"";
-  telephone.value=r.telephone||"";
-  vehicule.value=r.vehicule||"";
-  travaux.value=r.travaux||"";
-  date.value=r.date||"";
-  heure.value=r.heure||"";
-  duree.value=String(r.duree||1);
-  technicien.value=r.technicien||"";
-  courtoisie.value=r.courtoisie||"Aucun";
-  statut.value=r.statut||"À faire";
-
-  modalDetail.style.display="none";
-  modalForm.style.display="flex";
-}
-
-function fermerFormulaire(){
-  modalForm.style.display="none";
-}
-
-function viderFormulaire(){
-  civilite.value="";
-  client.value="";
-  telephone.value="";
-  vehicule.value="";
-  travaux.value="";
-  date.value="";
-  heure.value="";
-  duree.value="1";
-  technicien.value="";
-  courtoisie.value="Aucun";
-  statut.value="À faire";
-}
+/* RDV */
+function ouvrirDepuisCreneau(d,h){modeEdition=false;editionId=null;formTitle.innerText="Ajouter un rendez-vous";viderFormulaire();date.value=d;heure.value=h;modalForm.style.display="flex"}
+function ouvrirFormulaire(){modeEdition=false;editionId=null;formTitle.innerText="Ajouter un rendez-vous";viderFormulaire();modalForm.style.display="flex"}
+function fermerFormulaire(){modalForm.style.display="none"}
+function viderFormulaire(){civilite.value="";client.value="";telephone.value="";vehicule.value="";travaux.value="";date.value="";heure.value="";duree.value="1";technicien.value="";courtoisie.value="Aucun";statut.value="À faire"}
 
 function lireForm(){
   return{
@@ -696,112 +708,58 @@ function lireForm(){
   };
 }
 
-function enregistrerFormulaire(){
-  modeEdition ? modifierRDV() : ajouter();
-}
+function enregistrerFormulaire(){modeEdition?modifierRDV():ajouter()}
 
 function ajouter(){
   const item=lireForm();
+  if(!item.client||!item.date||!item.heure||!item.technicien){alert("Il faut au minimum client, date, heure et technicien.");return}
 
-  if(!item.client||!item.date||!item.heure||!item.technicien){
-    alert("Il faut au minimum client, date, heure et technicien.");
-    return;
-  }
-
-  fetch(API_URL,{
-    method:"POST",
-    body:JSON.stringify({
-      ID:item.id,
-      Civilite:item.civilite,
-      Date:item.date,
-      Heure:item.heure,
-      Client:item.client,
-      "Véhicule":item.vehicule,
-      "Téléphone":item.telephone,
-      Travaux:item.travaux,
-      Technicien:item.technicien,
-      "Durée":item.duree,
-      Courtoisie:item.courtoisie,
-      Statut:item.statut
-    })
-  })
-  .then(()=>{
-    fermerFormulaire();
-    setTimeout(chargerPlanning,800);
-  })
-  .catch(()=>alert("Erreur lors de l'enregistrement."));
+  apiPost({
+    ID:item.id,Civilite:item.civilite,Date:item.date,Heure:item.heure,Client:item.client,
+    "Véhicule":item.vehicule,"Téléphone":item.telephone,Travaux:item.travaux,
+    Technicien:item.technicien,"Durée":item.duree,Courtoisie:item.courtoisie,Statut:item.statut
+  }).then(res=>{
+    if(res && res.ok===false){alert(res.error||"Enregistrement impossible");return}
+    fermerFormulaire();setTimeout(chargerPlanning,800);
+  }).catch(()=>alert("Erreur lors de l'enregistrement."));
 }
 
 function modifierRDV(){
   const item=lireForm();
+  if(!item.client||!item.date||!item.heure||!item.technicien){alert("Il faut au minimum client, date, heure et technicien.");return}
 
-  if(!item.client||!item.date||!item.heure||!item.technicien){
-    alert("Il faut au minimum client, date, heure et technicien.");
-    return;
-  }
+  apiPost({
+    action:"update",OldID:editionId,ID:item.id,Civilite:item.civilite,Date:item.date,Heure:item.heure,Client:item.client,
+    "Véhicule":item.vehicule,"Téléphone":item.telephone,Travaux:item.travaux,
+    Technicien:item.technicien,"Durée":item.duree,Courtoisie:item.courtoisie,Statut:item.statut
+  }).then(res=>{
+    if(res && res.ok===false){alert(res.error||"Modification impossible");return}
+    fermerFormulaire();fermerDetail();setTimeout(chargerPlanning,800);
+  }).catch(()=>alert("Erreur lors de la modification."));
+}
 
-  fetch(API_URL,{
-    method:"POST",
-    body:JSON.stringify({
-      action:"update",
-      OldID:editionId,
-      ID:item.id,
-      Civilite:item.civilite,
-      Date:item.date,
-      Heure:item.heure,
-      Client:item.client,
-      "Véhicule":item.vehicule,
-      "Téléphone":item.telephone,
-      Travaux:item.travaux,
-      Technicien:item.technicien,
-      "Durée":item.duree,
-      Courtoisie:item.courtoisie,
-      Statut:item.statut
-    })
-  })
-  .then(()=>{
-    fermerFormulaire();
-    fermerDetail();
-    setTimeout(chargerPlanning,800);
-  })
-  .catch(()=>alert("Erreur lors de la modification."));
+function ouvrirModification(id){
+  const r=interventions.find(x=>String(x.id)===String(id));if(!r)return;
+  modeEdition=true;editionId=r.id;rdvSelectionne=r;formTitle.innerText="Modifier le rendez-vous";
+  civilite.value=r.civilite||"";client.value=r.client||"";telephone.value=r.telephone||"";vehicule.value=r.vehicule||"";travaux.value=r.travaux||"";
+  date.value=r.date||"";heure.value=r.heure||"";duree.value=String(r.duree||1);technicien.value=r.technicien||"";courtoisie.value=r.courtoisie||"Aucun";statut.value=r.statut||"À faire";
+  modalDetail.style.display="none";modalForm.style.display="flex";
 }
 
 function deposerRDV(e,d,h){
   const id=e.dataTransfer.getData("text/plain");
   const r=interventions.find(x=>String(x.id)===String(id));
-
   if(!r)return;
-
-  rdvSelectionne=r;
-  modeEdition=true;
-  editionId=r.id;
-
-  civilite.value=r.civilite||"";
-  client.value=r.client||"";
-  telephone.value=r.telephone||"";
-  vehicule.value=r.vehicule||"";
-  travaux.value=r.travaux||"";
-  date.value=d;
-  heure.value=h;
-  duree.value=String(r.duree);
-  technicien.value=r.technicien||"";
-  courtoisie.value=r.courtoisie||"Aucun";
-  statut.value=r.statut||"À faire";
-
+  ouvrirModification(id);
+  date.value=d;heure.value=h;
   modifierRDV();
 }
 
 function ouvrirDetail(id){
-  const r=interventions.find(x=>String(x.id)===String(id));
-
-  if(!r)return;
-
+  const r=interventions.find(x=>String(x.id)===String(id));if(!r)return;
   rdvSelectionne=r;
-
-  const smsConf = r.smsConfirmation ? "✅ SMS RDV envoyé : " + r.smsConfirmation : "❌ SMS RDV non envoyé";
-  const smsPret = r.smsPret ? "✅ SMS véhicule prêt : " + r.smsPret : "❌ SMS véhicule prêt non envoyé";
-
+  const smsConf=r.smsConfirmation?"✅ SMS RDV envoyé : "+r.smsConfirmation:"❌ SMS RDV non envoyé";
+  const smsPret=r.smsPret?"✅ SMS véhicule prêt : "+r.smsPret:"❌ SMS véhicule prêt non envoyé";
   detailContent.innerHTML=`
     <p><b>Civilité :</b> ${r.civilite||""}</p>
     <p><b>Client :</b> ${r.client||""}</p>
@@ -813,260 +771,157 @@ function ouvrirDetail(id){
     <p><b>Courtoisie :</b> ${r.courtoisie||"Aucun"}</p>
     <p><b>Statut :</b> ${r.statut||""}</p>
     <p><b>Travaux :</b><br>${r.travaux||""}</p>
-    <hr>
-    <p>${smsConf}</p>
-    <p>${smsPret}</p>
-  `;
-
+    <hr><p>${smsConf}</p><p>${smsPret}</p>`;
   modalDetail.style.display="flex";
 }
-
-function fermerDetail(){
-  modalDetail.style.display="none";
-  rdvSelectionne=null;
-}
-
-function modifierDepuisDetail(){
-  if(!rdvSelectionne)return;
-  ouvrirModification(String(rdvSelectionne.id));
-}
-
+function fermerDetail(){modalDetail.style.display="none";rdvSelectionne=null}
+function modifierDepuisDetail(){if(!rdvSelectionne)return;ouvrirModification(String(rdvSelectionne.id))}
 function supprimerRDV(){
   if(!rdvSelectionne)return;
-
   if(!confirm("Supprimer ce RDV partout ?"))return;
-
   fetch(API_URL+"?action=delete&id="+encodeURIComponent(rdvSelectionne.id)+"&t="+Date.now())
-    .then(r=>r.json())
-    .then(res=>{
-      if(res.ok){
-        fermerDetail();
-        chargerPlanning();
-      }else{
-        alert("Suppression impossible");
-      }
-    })
+    .then(r=>r.json()).then(res=>{if(res.ok){fermerDetail();chargerPlanning()}else alert("Suppression impossible")})
     .catch(()=>alert("Erreur lors de la suppression."));
 }
 
-function formaterTelephoneSMS(numero){
-  let n = String(numero || "")
-    .trim()
-    .replace(/\s/g,"")
-    .replace(/\./g,"")
-    .replace(/-/g,"")
-    .replace(/\(/g,"")
-    .replace(/\)/g,"");
-
-  if(!n) return "";
-
-  if(n.startsWith("+33")) return n;
-  if(n.startsWith("0033")) return "+33" + n.substring(4);
-  if(n.startsWith("33")) return "+33" + n.substring(2);
-  if(n.startsWith("0")) return "+33" + n.substring(1);
-  if(n.startsWith("6") || n.startsWith("7")) return "+33" + n;
-
-  return n;
+/* SALARIES */
+function ouvrirSalaries(){afficherTableauxAdmin();modalSalaries.style.display="flex"}
+function fermerSalaries(){modalSalaries.style.display="none"}
+function ajouterSalarie(){
+  const nom=salNom.value.trim();
+  if(!nom){alert("Nom obligatoire");return}
+  apiPost({action:"add_employee",Nom:nom,Couleur:salCouleur.value,Telephone:salTelephone.value,Email:salEmail.value})
+    .then(res=>{if(res.ok===false)alert(res.error);salNom.value="";salTelephone.value="";salEmail.value="";setTimeout(chargerPlanning,800)})
+}
+function supprimerSalarie(nom){
+  if(!confirm("Désactiver "+nom+" ? Ses anciens RDV resteront visibles."))return;
+  apiPost({action:"delete_employee",Nom:nom}).then(()=>setTimeout(chargerPlanning,800));
 }
 
-function formuleClientSMS(rdv){
-  const nom = rdv.client || "";
-  const civ = rdv.civilite || "";
-
-  if(civ === "Madame") return "Mme " + nom;
-  if(civ === "Monsieur") return "M. " + nom;
-
-  return nom;
+/* ABSENCES */
+function ouvrirAbsences(){afficherTableauxAdmin();modalAbsences.style.display="flex"}
+function fermerAbsences(){modalAbsences.style.display="none"}
+function ajouterAbsence(){
+  if(!absSalarie.value || !absDebut.value){alert("Salarié et date début obligatoires");return}
+  apiPost({action:"add_absence",Salarie:absSalarie.value,Type:absType.value,DateDebut:absDebut.value,DateFin:absFin.value||absDebut.value,Commentaire:absCommentaire.value})
+    .then(res=>{if(res.ok===false)alert(res.error);absCommentaire.value="";setTimeout(chargerPlanning,800)})
+}
+function supprimerAbsence(id){
+  if(!confirm("Supprimer cette absence ?"))return;
+  apiPost({action:"delete_absence",ID:id}).then(()=>setTimeout(chargerPlanning,800));
 }
 
-function formatDateFRSMS(dateIso){
-  if(!dateIso) return "";
-  const p = String(dateIso).split("-");
-  if(p.length === 3){
-    return p[2] + "/" + p[1] + "/" + p[0];
-  }
-  return dateIso;
+/* PRETS */
+function ouvrirPretVehicule(){afficherTableauxAdmin();modalPretVehicule.style.display="flex"}
+function fermerPretVehicule(){modalPretVehicule.style.display="none"}
+function ajouterPretVehicule(){
+  if(!pretClient.value || !pretVehicule.value || !pretDebut.value){alert("Client, véhicule et date début obligatoires");return}
+  apiPost({action:"add_vehicle_loan",Client:pretClient.value,Telephone:pretTelephone.value,Vehicule:pretVehicule.value,DateDebut:pretDebut.value,DateFin:pretFin.value||pretDebut.value,Commentaire:pretCommentaire.value})
+    .then(res=>{if(res.ok===false)alert(res.error);pretClient.value="";pretTelephone.value="";pretCommentaire.value="";setTimeout(chargerPlanning,800)})
+}
+function supprimerPretVehicule(id){
+  if(!confirm("Supprimer ce prêt véhicule ?"))return;
+  apiPost({action:"delete_vehicle_loan",ID:id}).then(()=>setTimeout(chargerPlanning,800));
 }
 
-function ouvrirSmsManuel(numero, message){
-  const tel = formaterTelephoneSMS(numero);
+function afficherTableauxAdmin(){
+  listeSalaries.innerHTML="";
+  salaries.forEach(s=>{
+    listeSalaries.innerHTML+=`<tr>
+      <td>${s.Nom}</td><td>${s.Actif}</td><td><span class="dot" style="background:${s.Couleur}"></span>${s.Couleur||""}</td>
+      <td style="font-size:11px">${s.AgendaId||""}</td>
+      <td>${String(s.Actif).toUpperCase()==="OUI"?`<button class="danger small" onclick="supprimerSalarie('${s.Nom}')">Désactiver</button>`:"Inactif"}</td>
+    </tr>`;
+  });
 
-  if(!tel){
-    alert("Aucun téléphone valide pour ce client.");
-    return;
-  }
+  listeAbsences.innerHTML="";
+  absences.forEach(a=>{
+    listeAbsences.innerHTML+=`<tr>
+      <td>${a.Salarie}</td><td>${a.Type}</td><td>${a.DateDebut}</td><td>${a.DateFin}</td><td>${a.Commentaire||""}</td>
+      <td><button class="danger small" onclick="supprimerAbsence('${a.ID}')">Supprimer</button></td>
+    </tr>`;
+  });
 
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-  if(isMobile){
-    window.location.href = "sms:" + tel + "?body=" + encodeURIComponent(message);
-    return;
-  }
-
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(message).then(()=>{
-      alert(
-        "Planning ouvert sur PC.\n\n" +
-        "Le message SMS a été copié.\n\n" +
-        "Numéro client : " + tel + "\n\n" +
-        "Tu peux le coller dans ton logiciel SMS ou l'envoyer depuis une tablette."
-      );
-    }).catch(()=>{
-      prompt("Copie ce SMS pour le client " + tel + " :", message);
-    });
-  }else{
-    prompt("Copie ce SMS pour le client " + tel + " :", message);
-  }
-}
-
-function appelerAppsScriptParIframe(action, id){
-  return new Promise((resolve)=>{
-    const callbackName = "callbackSMS_" + Date.now();
-
-    window[callbackName] = function(res){
-      delete window[callbackName];
-
-      const script = document.getElementById(callbackName);
-      if(script) script.remove();
-
-      if(res && res.ok){
-        resolve(true);
-      }else{
-        alert(
-          "Erreur lors de l'envoi du SMS :\n\n" +
-          (res && res.error ? res.error : JSON.stringify(res))
-        );
-        resolve(false);
-      }
-    };
-
-    const script = document.createElement("script");
-    script.id = callbackName;
-    script.src =
-      API_URL +
-      "?action=" + encodeURIComponent(action) +
-      "&id=" + encodeURIComponent(id) +
-      "&callback=" + encodeURIComponent(callbackName) +
-      "&t=" + Date.now();
-
-    script.onerror = function(){
-      delete window[callbackName];
-      alert("Impossible de contacter Apps Script pour envoyer le SMS.");
-      resolve(false);
-    };
-
-    document.body.appendChild(script);
+  listePrets.innerHTML="";
+  pretsVehicules.forEach(p=>{
+    listePrets.innerHTML+=`<tr>
+      <td>${p.Client}</td><td>${p.Vehicule}</td><td>${p.DateDebut}</td><td>${p.DateFin}</td><td>${p.Commentaire||""}</td>
+      <td><button class="danger small" onclick="supprimerPretVehicule('${p.ID}')">Supprimer</button></td>
+    </tr>`;
   });
 }
 
-function smsConfirmation(){
-  if(!rdvSelectionne){
-    alert("Aucun rendez-vous sélectionné.");
-    return;
-  }
-
-  if(!rdvSelectionne.telephone){
-    alert("Aucun téléphone renseigné pour ce client.");
-    return;
-  }
-
-  appelerAppsScriptParIframe("sms_confirm", rdvSelectionne.id)
-    .then((ok)=>{
-      if(ok){
-        setTimeout(()=>{
-          chargerPlanning();
-          fermerDetail();
-        }, 800);
-      }
-    });
-}
-
-function smsVehiculePret(){
-  if(!rdvSelectionne){
-    alert("Aucun rendez-vous sélectionné.");
-    return;
-  }
-
-  if(!rdvSelectionne.telephone){
-    alert("Aucun téléphone renseigné pour ce client.");
-    return;
-  }
-
-  appelerAppsScriptParIframe("sms_ready", rdvSelectionne.id)
-    .then((ok)=>{
-      if(ok){
-        setTimeout(()=>{
-          chargerPlanning();
-          fermerDetail();
-        }, 800);
-      }
-    });
-}
-
+/* COURTOISIE */
 function ouvrirCourtoisie(){
   const lundi=lundiDeLaSemaine(dateBase);
-
   courtoisieContent.innerHTML="";
 
   for(let i=0;i<6;i++){
-    const j=new Date(lundi);
-    j.setDate(lundi.getDate()+i);
-
+    const j=new Date(lundi);j.setDate(lundi.getDate()+i);
     const dt=formatDate(j);
-
     let html=`<div class="courtoisie-day"><h3>${joursNoms[i]} ${formatFR(j)}</h3>`;
 
     vehiculesCourtoisie.forEach(v=>{
-      const resa=interventions.find(x=>x.date===dt&&x.courtoisie===v);
+      const resaRDV=interventions.find(x=>x.date===dt&&x.courtoisie===v.Nom);
+      const pret=pretsVehicules.find(x=>x.Vehicule===v.Nom && dateDansPeriode(dt,x.DateDebut,x.DateFin));
+      const resa=resaRDV || pret;
 
       html+=resa
-        ? `<div class="courtoisie-line occupe"><b>🚗 ${v} : Réservé</b><br>${resa.client||""}<br>${resa.heure||""}</div>`
-        : `<div class="courtoisie-line libre"><b>🚗 ${v} : Libre</b></div>`;
+        ? `<div class="courtoisie-line occupe"><b>🚗 ${v.Nom} : Réservé</b><br>${resa.client||resa.Client||""}<br>${resa.heure||"Prêt journée"}</div>`
+        : `<div class="courtoisie-line libre"><b>🚗 ${v.Nom} : Libre</b></div>`;
     });
 
     html+=`</div>`;
-
     courtoisieContent.innerHTML+=html;
   }
 
   modalCourtoisie.style.display="flex";
 }
+function fermerCourtoisie(){modalCourtoisie.style.display="none"}
 
-function fermerCourtoisie(){
-  modalCourtoisie.style.display="none";
+/* SMS */
+function appelerAppsScriptParIframe(action,id){
+  return new Promise(resolve=>{
+    const callbackName="callbackSMS_"+Date.now();
+    window[callbackName]=function(res){
+      delete window[callbackName];
+      const script=document.getElementById(callbackName);if(script)script.remove();
+      if(res&&res.ok)resolve(true);else{alert("Erreur SMS :\n\n"+(res&&res.error?res.error:JSON.stringify(res)));resolve(false)}
+    };
+    const script=document.createElement("script");
+    script.id=callbackName;
+    script.src=API_URL+"?action="+encodeURIComponent(action)+"&id="+encodeURIComponent(id)+"&callback="+encodeURIComponent(callbackName)+"&t="+Date.now();
+    script.onerror=function(){delete window[callbackName];alert("Impossible de contacter Apps Script pour envoyer le SMS.");resolve(false)};
+    document.body.appendChild(script);
+  });
+}
+function smsConfirmation(){if(!rdvSelectionne){alert("Aucun RDV sélectionné");return}if(!rdvSelectionne.telephone){alert("Aucun téléphone");return}appelerAppsScriptParIframe("sms_confirm",rdvSelectionne.id).then(ok=>{if(ok)setTimeout(()=>{chargerPlanning();fermerDetail()},800)})}
+function smsVehiculePret(){if(!rdvSelectionne){alert("Aucun RDV sélectionné");return}if(!rdvSelectionne.telephone){alert("Aucun téléphone");return}appelerAppsScriptParIframe("sms_ready",rdvSelectionne.id).then(ok=>{if(ok)setTimeout(()=>{chargerPlanning();fermerDetail()},800)})}
+
+/* OUTILS */
+function formaterTelephoneSMS(numero){
+  let n=String(numero||"").trim().replace(/\s/g,"").replace(/\./g,"").replace(/-/g,"").replace(/\(/g,"").replace(/\)/g,"");
+  if(!n)return "";
+  if(n.startsWith("+33"))return n;
+  if(n.startsWith("0033"))return "+33"+n.substring(4);
+  if(n.startsWith("33"))return "+33"+n.substring(2);
+  if(n.startsWith("0"))return "+33"+n.substring(1);
+  if(n.startsWith("6")||n.startsWith("7"))return "+33"+n;
+  return n;
 }
 
 function chargeJour(tech,jour){
-  let total = 0;
-
-  interventions
-    .filter(i=>i.technicien===tech)
-    .forEach(i=>{
-      const segments = genererSegments(i);
-      segments.forEach(s=>{
-        if(s.date === jour){
-          total += s.minutes / 60;
-        }
-      });
-    });
-
+  let total=0;
+  interventions.filter(i=>i.technicien===tech).forEach(i=>{
+    const segments=genererSegments(i);
+    segments.forEach(s=>{if(s.date===jour)total+=s.minutes/60});
+  });
   return total;
 }
+function changerSemaine(nb){dateBase.setDate(dateBase.getDate()+nb);afficher()}
+function aujourdhui(){dateBase=new Date();afficher()}
 
-function changerSemaine(nb){
-  dateBase.setDate(dateBase.getDate()+nb);
-  afficher();
-}
-
-function aujourdhui(){
-  dateBase=new Date();
-  afficher();
-}
-
-if("serviceWorker"in navigator){
-  navigator.serviceWorker.register("service-worker.js");
-}
-
+if("serviceWorker"in navigator){navigator.serviceWorker.register("service-worker.js")}
 window.addEventListener("resize",()=>afficher());
 
 remplirDurees();
