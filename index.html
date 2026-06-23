@@ -355,7 +355,9 @@ function chargerPlanning(){
 
   window[callbackName] = function(data){
     try{
-      interventions=data.map(x=>({
+      const payload = Array.isArray(data) ? { interventions: data } : data;
+
+      interventions=(payload.interventions || []).map(x=>({
         id:x.ID,
         date:normaliserDate(x.Date),
         heure:normaliserHeure(x.Heure),
