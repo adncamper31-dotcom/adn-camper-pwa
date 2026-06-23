@@ -1,1480 +1,1077 @@
-/****************************************************
- * ADN CAMPER PLANNING V4.3 / V4.4
- * Base V3 stable
- * + Tableau de bord atelier
- * + Historique client
- * + Bilan absences salarié
- ****************************************************/
-
-const SHEET_NAME = "Feuille 1";
-const SHEET_SALARIES = "SALARIES";
-const SHEET_ABSENCES = "ABSENCES";
-const SHEET_PRETS = "PRETS_VEHICULES";
-const SHEET_COURTOISIE = "VEHICULES_COURTOISIE";
-
-const OVH_SMS_ENABLED = true;
-const OVH_SMS_ACCOUNT = "sms-sc1240858-1";
-const OVH_SMS_LOGIN = "planiningadn";
-const OVH_SMS_PASSWORD = "planinin";
-const OVH_SMS_FROM = "ADNCAMPER";
-
-const CALENDARS = {
-  atelier: "57e00c3296bd57b0911e93561320b9d594bede4e49daab524cd9b46211a52032@group.calendar.google.com",
-
-  techniciens: {
-    "Maxime": "abb69745f529e5a48296395a4a9aefe09df2b1d41e69486feff4320b7bd77f37@group.calendar.google.com",
-    "Joël": "2d4ed482bf94a4bbe9a4a2587f7045c87474b2b7f6f87157d499b01d19bac8d6@group.calendar.google.com",
-    "Guillaume": "65da3a8a9ec9c6ac4202fbd1f498fc43b8bfc0873bdc21b5f9151a93523901eb@group.calendar.google.com",
-    "Gaël": "ec29bc9f165397e19c0c0cef2b649e1ff095e571d87806445a4a0bbd0d94e26c@group.calendar.google.com"
-  },
-
-  courtoisie: {
-    "Berlingo": "4fd20f4829bbc1fa8c8538584ad0ed162fbc343939891b4429e3406c3de832e2@group.calendar.google.com",
-    "208": "d899401de423c27973a31acd2113384c2c60907b851bb2b46e7a23dc1b0f4d19@group.calendar.google.com",
-    "Up": "ac6e0d7a8e35fc8aac0bff1f6875df093da614aaeffc7c8098572ddba13b072a@group.calendar.google.com"
-  }
-};
-
-/* =========================
-   ROUTAGE API
-========================= */
-
-function doGet(e) {
-  initialiserBaseV3();
-
-  const action = e && e.parameter && e.parameter.action;
-  const callback = e && e.parameter && e.parameter.callback;
-
-  if (action === "delete") return supprimerRDV(e.parameter.id);
-
-  if (action === "sms_confirm") {
-    const result = envoyerSmsConfirmationSilencieux(e.parameter.id);
-    if (callback) return outputJSONP(callback, result);
-    return outputJSON(result);
-  }
-
-  if (action === "sms_ready") {
-    const result = envoyerSmsVehiculePretSilencieux(e.parameter.id);
-    if (callback) return outputJSONP(callback, result);
-    return outputJSON(result);
-  }
-
-  if (action === "config") {
-    const result = getConfigV3();
-    if (callback) return outputJSONP(callback, result);
-    return outputJSON(result);
-  }
-
-  if (action === "dashboard") {
-    const result = getDashboardV43(e.parameter.date || "");
-    if (callback) return outputJSONP(callback, result);
-    return outputJSON(result);
-  }
-
-  if (action === "client_history") {
-    const result = getHistoriqueClientV44(e.parameter.q || "");
-    if (callback) return outputJSONP(callback, result);
-    return outputJSON(result);
-  }
-
-  if (action === "absence_report") {
-    const result = getBilanAbsencesV44(
-      e.parameter.salarie || "",
-      e.parameter.debut || "",
-      e.parameter.fin || ""
-    );
-    if (callback) return outputJSONP(callback, result);
-    return outputJSON(result);
-  }
-
-  if (callback) return lirePlanningJSONP(callback);
-  return lirePlanning();
-}
-
-function doPost(e) {
-  initialiserBaseV3();
-
-  const d = JSON.parse(e.postData.contents || "{}");
-
-  if (d.action === "update") return modifierRDV(d);
-  if (d.action === "delete") return supprimerRDV(d.ID || d.id);
-
-  if (d.action === "sms_confirm") return envoyerSmsConfirmationManuel(d.ID || d.id);
-  if (d.action === "sms_ready") return envoyerSmsVehiculePret(d.ID || d.id);
-
-  if (d.action === "add_employee") return ajouterSalarie(d);
-  if (d.action === "delete_employee") return supprimerSalarie(d.Nom || d.nom);
-  if (d.action === "reactivate_employee") return reactiverSalarie(d.Nom || d.nom);
-
-  if (d.action === "add_absence") return ajouterAbsence(d);
-  if (d.action === "delete_absence") return supprimerAbsence(d.ID || d.id);
-
-  if (d.action === "add_vehicle_loan") return ajouterPretVehicule(d);
-  if (d.action === "delete_vehicle_loan") return supprimerPretVehicule(d.ID || d.id);
-
-  return ajouterRDV(d);
-}
-
-/* =========================
-   INITIALISATION ONGLET
-========================= */
-
-function initialiserBaseV3() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  let planning = ss.getSheetByName(SHEET_NAME);
-  if (!planning) planning = ss.insertSheet(SHEET_NAME);
-  garantirColonnes(planning);
-
-  let salaries = ss.getSheetByName(SHEET_SALARIES);
-  if (!salaries) {
-    salaries = ss.insertSheet(SHEET_SALARIES);
-    salaries.appendRow(["Nom", "Actif", "AgendaId", "Couleur", "Téléphone", "Email", "DateCreation"]);
-  }
-  garantirLigneSalariesInitiale(salaries);
-
-  let absences = ss.getSheetByName(SHEET_ABSENCES);
-  if (!absences) {
-    absences = ss.insertSheet(SHEET_ABSENCES);
-    absences.appendRow(["ID", "Salarie", "Type", "DateDebut", "DateFin", "Commentaire", "Statut", "EventId", "DateCreation"]);
-  }
-
-  let prets = ss.getSheetByName(SHEET_PRETS);
-  if (!prets) {
-    prets = ss.insertSheet(SHEET_PRETS);
-    prets.appendRow(["ID", "Client", "Téléphone", "Vehicule", "DateDebut", "DateFin", "Commentaire", "Statut", "EventCourtoisie", "DateCreation"]);
-  }
-
-  let vehicules = ss.getSheetByName(SHEET_COURTOISIE);
-  if (!vehicules) {
-    vehicules = ss.insertSheet(SHEET_COURTOISIE);
-    vehicules.appendRow(["Nom", "Actif", "AgendaId", "DateCreation"]);
-  }
-  garantirVehiculesInitials(vehicules);
-}
-
-function garantirLigneSalariesInitiale(sheet) {
-  const existing = sheet.getDataRange().getDisplayValues().map(r => String(r[0] || ""));
-  const couleurs = {
-    "Maxime": "#2563eb",
-    "Joël": "#16a34a",
-    "Guillaume": "#f97316",
-    "Gaël": "#dc2626"
-  };
-
-  Object.keys(CALENDARS.techniciens).forEach(nom => {
-    if (!existing.includes(nom)) {
-      sheet.appendRow([
-        nom,
-        "OUI",
-        CALENDARS.techniciens[nom],
-        couleurs[nom] || "#6b7280",
-        "",
-        "",
-        Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd")
-      ]);
-    }
-  });
-}
-
-function garantirVehiculesInitials(sheet) {
-  const existing = sheet.getDataRange().getDisplayValues().map(r => String(r[0] || ""));
-  Object.keys(CALENDARS.courtoisie).forEach(nom => {
-    if (!existing.includes(nom)) {
-      sheet.appendRow([
-        nom,
-        "OUI",
-        CALENDARS.courtoisie[nom],
-        Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd")
-      ]);
-    }
-  });
-}
-
-/* =========================
-   CONFIG DYNAMIQUE
-========================= */
-
-function getConfigV3() {
-  return {
-    ok: true,
-    salaries: getSalaries(true),
-    salariesActifs: getSalaries(false),
-    vehiculesCourtoisie: getVehiculesCourtoisie(false),
-    absences: getAbsences(),
-    prets: getPretsVehicules()
-  };
-}
-
-function getSalaries(includeInactifs) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SALARIES);
-  const values = sheet.getDataRange().getDisplayValues();
-  const rows = [];
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-    if (!r[0]) continue;
-    if (!includeInactifs && String(r[1]).toUpperCase() !== "OUI") continue;
-
-    rows.push({
-      Nom: r[0],
-      Actif: r[1],
-      AgendaId: r[2],
-      Couleur: r[3] || "#6b7280",
-      Telephone: r[4] || "",
-      Email: r[5] || "",
-      DateCreation: r[6] || ""
-    });
-  }
-  return rows;
-}
-
-function getVehiculesCourtoisie(includeInactifs) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_COURTOISIE);
-  const values = sheet.getDataRange().getDisplayValues();
-  const rows = [];
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-    if (!r[0]) continue;
-    if (!includeInactifs && String(r[1]).toUpperCase() !== "OUI") continue;
-
-    rows.push({
-      Nom: r[0],
-      Actif: r[1],
-      AgendaId: r[2],
-      DateCreation: r[3] || ""
-    });
-  }
-  return rows;
-}
-
-function getAbsences() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_ABSENCES);
-  const values = sheet.getDataRange().getDisplayValues();
-  const rows = [];
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-    if (!r[0]) continue;
-
-    rows.push({
-      ID: r[0],
-      Salarie: r[1],
-      Type: r[2],
-      DateDebut: normaliserDatePourApp(r[3]),
-      DateFin: normaliserDatePourApp(r[4]),
-      Commentaire: r[5],
-      Statut: r[6],
-      EventId: r[7],
-      DateCreation: r[8]
-    });
-  }
-  return rows;
-}
-
-function getPretsVehicules() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_PRETS);
-  const values = sheet.getDataRange().getDisplayValues();
-  const rows = [];
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-    if (!r[0]) continue;
-
-    rows.push({
-      ID: r[0],
-      Client: r[1],
-      Telephone: r[2],
-      Vehicule: r[3],
-      DateDebut: normaliserDatePourApp(r[4]),
-      DateFin: normaliserDatePourApp(r[5]),
-      Commentaire: r[6],
-      Statut: r[7],
-      EventCourtoisie: r[8],
-      DateCreation: r[9]
-    });
-  }
-  return rows;
-}
-
-function getTechnicienAgendaId(nom) {
-  const s = getSalaries(true).find(x => x.Nom === nom);
-  return s ? s.AgendaId : (CALENDARS.techniciens[nom] || "");
-}
-
-function getCourtoisieAgendaId(nom) {
-  const v = getVehiculesCourtoisie(true).find(x => x.Nom === nom);
-  return v ? v.AgendaId : (CALENDARS.courtoisie[nom] || "");
-}
-
-/* =========================
-   V4.3 TABLEAU DE BORD
-========================= */
-
-function getDashboardV43(dateIso) {
-  const dateRef = dateIso ? normaliserDatePourApp(dateIso) : Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd");
-
-  const rdv = getPlanningRows().filter(r => normaliserDatePourApp(r.Date) === dateRef);
-  const salariesActifs = getSalaries(false);
-  const absencesJour = getAbsences().filter(a => dateDansPeriode(dateRef, a.DateDebut, a.DateFin));
-  const pretsJour = getPretsVehicules().filter(p => dateDansPeriode(dateRef, p.DateDebut, p.DateFin));
-  const vehicules = getVehiculesCourtoisie(false);
-
-  const charge = salariesActifs.map(s => {
-    let heures = 0;
-    rdv.filter(r => r.Technicien === s.Nom).forEach(r => {
-      heures += Number(r["Durée"] || 0);
-    });
-
-    const absent = absencesJour.find(a => a.Salarie === s.Nom);
-
-    return {
-      Salarie: s.Nom,
-      Heures: heures,
-      Absent: !!absent,
-      TypeAbsence: absent ? absent.Type : ""
-    };
-  });
-
-  const courtoisie = vehicules.map(v => {
-    const rdvVehicule = rdv.find(r => r.Courtoisie === v.Nom);
-    const pretVehicule = pretsJour.find(p => p.Vehicule === v.Nom);
-
-    return {
-      Vehicule: v.Nom,
-      Disponible: !rdvVehicule && !pretVehicule,
-      Source: pretVehicule ? "Prêt indépendant" : (rdvVehicule ? "RDV atelier" : "Libre"),
-      Client: pretVehicule ? pretVehicule.Client : (rdvVehicule ? rdvVehicule.Client : ""),
-      DateDebut: pretVehicule ? pretVehicule.DateDebut : dateRef,
-      DateFin: pretVehicule ? pretVehicule.DateFin : dateRef
-    };
-  });
-
-  return {
-    ok: true,
-    date: dateRef,
-    totalRdv: rdv.length,
-    rdvJour: rdv,
-    absents: absencesJour,
-    prets: pretsJour,
-    charge: charge,
-    courtoisie: courtoisie
-  };
-}
-
-/* =========================
-   V4.4 HISTORIQUE CLIENT
-========================= */
-
-function getHistoriqueClientV44(query) {
-  const q = String(query || "").trim().toLowerCase();
-
-  if (!q) {
-    return {
-      ok: false,
-      error: "Recherche client vide"
-    };
-  }
-
-  const rdv = getPlanningRows().filter(r => {
-    const client = String(r.Client || "").toLowerCase();
-    const vehicule = String(r["Véhicule"] || "").toLowerCase();
-    const tel = String(r["Téléphone"] || "").toLowerCase();
-
-    return client.includes(q) || vehicule.includes(q) || tel.includes(q);
-  });
-
-  const prets = getPretsVehicules().filter(p => {
-    const client = String(p.Client || "").toLowerCase();
-    const tel = String(p.Telephone || "").toLowerCase();
-    return client.includes(q) || tel.includes(q);
-  });
-
-  rdv.sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
-  prets.sort((a, b) => String(b.DateDebut).localeCompare(String(a.DateDebut)));
-
-  const vehicules = {};
-  rdv.forEach(r => {
-    if (r["Véhicule"]) vehicules[r["Véhicule"]] = true;
-  });
-
-  return {
-    ok: true,
-    recherche: query,
-    totalRdv: rdv.length,
-    totalPrets: prets.length,
-    vehicules: Object.keys(vehicules),
-    rdv: rdv,
-    prets: prets
-  };
-}
-
-/* =========================
-   V4.4 BILAN ABSENCES
-========================= */
-
-function getBilanAbsencesV44(salarie, debutIso, finIso) {
-  const salarieRecherche = String(salarie || "").trim();
-  const debut = debutIso ? normaliserDatePourApp(debutIso) : "";
-  const fin = finIso ? normaliserDatePourApp(finIso) : "";
-
-  if (!salarieRecherche || !debut || !fin) {
-    return {
-      ok: false,
-      error: "Salarié, date début et date fin obligatoires"
-    };
-  }
-
-  const toutes = getAbsences().filter(a => String(a.Salarie) === salarieRecherche);
-
-  const absencesFiltrees = [];
-
-  toutes.forEach(a => {
-    const chevauche = periodesSeChevauchent(a.DateDebut, a.DateFin, debut, fin);
-
-    if (chevauche) {
-      const jours = compterJoursOuvresDansChevauchement(a.DateDebut, a.DateFin, debut, fin);
-      const heures = jours * 7;
-
-      absencesFiltrees.push({
-        ID: a.ID,
-        Salarie: a.Salarie,
-        Type: a.Type,
-        DateDebut: a.DateDebut,
-        DateFin: a.DateFin,
-        Commentaire: a.Commentaire,
-        JoursOuvres: jours,
-        Heures: heures
-      });
-    }
-  });
-
-  const parType = {};
-  let totalJours = 0;
-  let totalHeures = 0;
-
-  absencesFiltrees.forEach(a => {
-    if (!parType[a.Type]) {
-      parType[a.Type] = {
-        Type: a.Type,
-        JoursOuvres: 0,
-        Heures: 0
-      };
-    }
-
-    parType[a.Type].JoursOuvres += a.JoursOuvres;
-    parType[a.Type].Heures += a.Heures;
-
-    totalJours += a.JoursOuvres;
-    totalHeures += a.Heures;
-  });
-
-  return {
-    ok: true,
-    salarie: salarieRecherche,
-    debut: debut,
-    fin: fin,
-    totalJoursOuvres: totalJours,
-    totalHeures: totalHeures,
-    detailParType: Object.keys(parType).map(k => parType[k]),
-    absences: absencesFiltrees
-  };
-}
-
-function periodesSeChevauchent(debut1, fin1, debut2, fin2) {
-  const d1 = dateDepuisTexte(debut1);
-  const f1 = dateDepuisTexte(fin1 || debut1);
-  const d2 = dateDepuisTexte(debut2);
-  const f2 = dateDepuisTexte(fin2 || debut2);
-
-  return d1 <= f2 && d2 <= f1;
-}
-
-function compterJoursOuvresDansChevauchement(debutAbs, finAbs, debutPeriode, finPeriode) {
-  let d1 = dateDepuisTexte(debutAbs);
-  let f1 = dateDepuisTexte(finAbs || debutAbs);
-  const d2 = dateDepuisTexte(debutPeriode);
-  const f2 = dateDepuisTexte(finPeriode || debutPeriode);
-
-  if (d1 < d2) d1 = d2;
-  if (f1 > f2) f1 = f2;
-
-  let total = 0;
-  const cur = new Date(d1);
-
-  while (cur <= f1) {
-    const day = cur.getDay();
-    if (day !== 0) {
-      total++;
-    }
-    cur.setDate(cur.getDate() + 1);
-  }
-
-  return total;
-}
-
-/* =========================
-   SALARIES
-========================= */
-
-function ajouterSalarie(d) {
-  const nom = String(d.Nom || d.nom || "").trim();
-  if (!nom) return outputJSON({ ok: false, error: "Nom salarié manquant" });
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SALARIES);
-  const values = sheet.getDataRange().getDisplayValues();
-
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]).toLowerCase() === nom.toLowerCase()) {
-      sheet.getRange(i + 1, 2).setValue("OUI");
-      return outputJSON({ ok: true, message: "Salarié réactivé", nom: nom });
-    }
-  }
-
-  const nomAgenda = "ADN - " + nom;
-  let agendaId = "";
-  const existants = CalendarApp.getCalendarsByName(nomAgenda);
-
-  if (existants.length > 0) {
-    agendaId = existants[0].getId();
-  } else {
-    const cal = CalendarApp.createCalendar(nomAgenda);
-    agendaId = cal.getId();
-  }
-
-  sheet.appendRow([
-    nom,
-    "OUI",
-    agendaId,
-    d.Couleur || d.couleur || "#6b7280",
-    d.Telephone || d.telephone || "",
-    d.Email || d.email || "",
-    Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd")
-  ]);
-
-  return outputJSON({ ok: true, nom: nom, agendaId: agendaId });
-}
-
-function supprimerSalarie(nom) {
-  if (!nom) return outputJSON({ ok: false, error: "Nom salarié manquant" });
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SALARIES);
-  const values = sheet.getDataRange().getDisplayValues();
-
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]) === String(nom)) {
-      sheet.getRange(i + 1, 2).setValue("NON");
-      return outputJSON({ ok: true, deleted: nom, mode: "désactivation" });
-    }
-  }
-
-  return outputJSON({ ok: false, error: "Salarié introuvable" });
-}
-
-function reactiverSalarie(nom) {
-  if (!nom) return outputJSON({ ok: false, error: "Nom salarié manquant" });
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SALARIES);
-  const values = sheet.getDataRange().getDisplayValues();
-
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]) === String(nom)) {
-      sheet.getRange(i + 1, 2).setValue("OUI");
-      return outputJSON({ ok: true, reactivated: nom });
-    }
-  }
-
-  return outputJSON({ ok: false, error: "Salarié introuvable" });
-}
-
-/* =========================
-   ABSENCES
-========================= */
-
-function ajouterAbsence(d) {
-  const salarie = d.Salarie || d.salarie;
-  const dateDebut = normaliserDatePourApp(d.DateDebut || d.dateDebut);
-  const dateFin = normaliserDatePourApp(d.DateFin || d.dateFin || dateDebut);
-  const type = d.Type || d.type || "Absence";
-  const commentaire = d.Commentaire || d.commentaire || "";
-
-  if (!salarie || !dateDebut) return outputJSON({ ok: false, error: "Salarié et date début obligatoires" });
-
-  const id = d.ID || d.id || ("ABS-" + new Date().getTime());
-  let eventId = "";
-
-  const calId = getTechnicienAgendaId(salarie);
-  if (calId) {
-    const cal = CalendarApp.getCalendarById(calId);
-    if (cal) {
-      const debut = dateDepuisTexte(dateDebut);
-      const fin = dateDepuisTexte(dateFin);
-      fin.setDate(fin.getDate() + 1);
-      const ev = cal.createAllDayEvent("ABSENCE - " + type, debut, fin, {
-        description: "Salarié : " + salarie + "\nType : " + type + "\nCommentaire : " + commentaire
-      });
-      eventId = ev.getId();
-    }
-  }
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_ABSENCES);
-  sheet.appendRow([
-    id,
-    salarie,
-    type,
-    dateDebut,
-    dateFin,
-    commentaire,
-    "Actif",
-    eventId,
-    Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd")
-  ]);
-
-  return outputJSON({ ok: true, id: id });
-}
-
-function supprimerAbsence(id) {
-  if (!id) return outputJSON({ ok: false, error: "ID absence manquant" });
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_ABSENCES);
-  const values = sheet.getDataRange().getDisplayValues();
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-
-    if (String(r[0]) === String(id)) {
-      const calId = getTechnicienAgendaId(r[1]);
-      supprimerEvent(calId, r[7]);
-      sheet.deleteRow(i + 1);
-      return outputJSON({ ok: true, deleted: id });
-    }
-  }
-
-  return outputJSON({ ok: false, error: "Absence introuvable" });
-}
-
-/* =========================
-   PRETS VEHICULES INDEPENDANTS
-========================= */
-
-function ajouterPretVehicule(d) {
-  const client = d.Client || d.client || "";
-  const telephone = normaliserNumeroTel(d.Telephone || d.telephone || "");
-  const vehicule = d.Vehicule || d.vehicule || "";
-  const dateDebut = normaliserDatePourApp(d.DateDebut || d.dateDebut);
-  const dateFin = normaliserDatePourApp(d.DateFin || d.dateFin || dateDebut);
-  const commentaire = d.Commentaire || d.commentaire || "";
-
-  if (!client || !vehicule || !dateDebut) {
-    return outputJSON({ ok: false, error: "Client, véhicule et date début obligatoires" });
-  }
-
-  const id = d.ID || d.id || ("PRET-" + new Date().getTime());
-  let eventId = "";
-
-  const calId = getCourtoisieAgendaId(vehicule);
-  if (calId) {
-    const cal = CalendarApp.getCalendarById(calId);
-    if (cal) {
-      const debut = dateDepuisTexte(dateDebut);
-      const fin = dateDepuisTexte(dateFin);
-      fin.setDate(fin.getDate() + 1);
-      const ev = cal.createAllDayEvent("PRÊT - " + client, debut, fin, {
-        description: "Client : " + client + "\nTéléphone : " + telephone + "\nVéhicule : " + vehicule + "\nCommentaire : " + commentaire
-      });
-      eventId = ev.getId();
-    }
-  }
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_PRETS);
-  sheet.appendRow([
-    id,
-    client,
-    telephone,
-    vehicule,
-    dateDebut,
-    dateFin,
-    commentaire,
-    "Actif",
-    eventId,
-    Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd")
-  ]);
-
-  return outputJSON({ ok: true, id: id });
-}
-
-function supprimerPretVehicule(id) {
-  if (!id) return outputJSON({ ok: false, error: "ID prêt manquant" });
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_PRETS);
-  const values = sheet.getDataRange().getDisplayValues();
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-
-    if (String(r[0]) === String(id)) {
-      const calId = getCourtoisieAgendaId(r[3]);
-      supprimerEvent(calId, r[8]);
-      sheet.deleteRow(i + 1);
-      return outputJSON({ ok: true, deleted: id });
-    }
-  }
-
-  return outputJSON({ ok: false, error: "Prêt introuvable" });
-}
-
-/* =========================
-   LECTURE PLANNING
-========================= */
-
-function lirePlanning() {
-  return outputJSON(getPlanningPayload());
-}
-
-function lirePlanningJSONP(callback) {
-  const payload = getPlanningPayload();
-  const safeCallback = String(callback || "").replace(/[^\w$.]/g, "");
-  const js = safeCallback + "(" + JSON.stringify(payload) + ");";
-
-  return ContentService
-    .createTextOutput(js)
-    .setMimeType(ContentService.MimeType.JAVASCRIPT);
-}
-
-function getPlanningPayload() {
-  return {
-    interventions: getPlanningRows(),
-    salaries: getSalaries(true),
-    salariesActifs: getSalaries(false),
-    absences: getAbsences(),
-    prets: getPretsVehicules(),
-    vehiculesCourtoisie: getVehiculesCourtoisie(false)
-  };
-}
-
-function getPlanningRows() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  garantirColonnes(sheet);
-
-  const values = sheet.getDataRange().getDisplayValues();
-  const rows = [];
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-
-    if (!r[0] && !r[1] && !r[3]) continue;
-
-    rows.push({
-      ID: r[0],
-      Date: normaliserDatePourApp(r[1]),
-      Heure: normaliserHeurePourApp(r[2]),
-      Client: r[3],
-      "Véhicule": r[4],
-      "Téléphone": normaliserNumeroTel(r[5]),
-      Travaux: r[6],
-      Technicien: r[7],
-      "Durée": normaliserDuree(r[8]),
-      Courtoisie: r[9],
-      Statut: r[10],
-      EventAtelier: r[11] || "",
-      EventTech: r[12] || "",
-      EventCourtoisie: r[13] || "",
-      Civilite: r[14] || "",
-      SmsConfirmation: r[15] || "",
-      SmsRappel: r[16] || "",
-      SmsPret: r[17] || "",
-      DateCreation: r[18] || ""
-    });
-  }
-
-  return rows;
-}
-
-/* =========================
-   RDV
-========================= */
-
-function ajouterRDV(d) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  garantirColonnes(sheet);
-
-  const data = preparerData(d);
-
-  const conflit = detecterConflit(data);
-  if (conflit.bloquant) return outputJSON({ ok: false, error: conflit.message });
-
-  const events = creerEvenementsAgenda(data);
-
-  sheet.appendRow([
-    data.ID,
-    data.Date,
-    data.Heure,
-    data.Client,
-    data["Véhicule"],
-    data["Téléphone"],
-    data.Travaux,
-    data.Technicien,
-    data["Durée"],
-    data.Courtoisie,
-    data.Statut,
-    events.atelier || "",
-    events.tech || "",
-    events.courtoisie || "",
-    data.Civilite || "",
-    "",
-    "",
-    "",
-    Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd")
-  ]);
-
-  const joursAvant = differenceJours(new Date(), dateDepuisTexte(data.Date));
-  if (joursAvant >= 2) envoyerSmsConfirmationAuto(data.ID);
-
-  return outputJSON({ ok: true, id: data.ID });
-}
-
-function modifierRDV(d) {
-  const oldId = d.OldID || d.ID || d.id;
-
-  if (!oldId) {
-    return outputJSON({ ok: false, error: "ID manquant pour modification" });
-  }
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  garantirColonnes(sheet);
-
-  const values = sheet.getDataRange().getDisplayValues();
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-
-    if (String(r[0]) === String(oldId)) {
-      supprimerEvent(CALENDARS.atelier, r[11]);
-
-      const idTechCal = getTechnicienAgendaId(r[7]);
-      if (idTechCal) supprimerEvent(idTechCal, r[12]);
-
-      const idCourtoisieCal = getCourtoisieAgendaId(r[9]);
-      if (idCourtoisieCal && r[9] !== "Aucun") supprimerEvent(idCourtoisieCal, r[13]);
-
-      const data = preparerData(d);
-      data.ID = oldId;
-
-      const conflit = detecterConflit(data, oldId);
-      if (conflit.bloquant) return outputJSON({ ok: false, error: conflit.message });
-
-      const events = creerEvenementsAgenda(data);
-      const oldDateCreation = r[18] || Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd");
-
-      sheet.getRange(i + 1, 1, 1, 19).setValues([[
-        data.ID,
-        data.Date,
-        data.Heure,
-        data.Client,
-        data["Véhicule"],
-        data["Téléphone"],
-        data.Travaux,
-        data.Technicien,
-        data["Durée"],
-        data.Courtoisie,
-        data.Statut,
-        events.atelier || "",
-        events.tech || "",
-        events.courtoisie || "",
-        data.Civilite || r[14] || "",
-        r[15] || "",
-        r[16] || "",
-        r[17] || "",
-        oldDateCreation
-      ]]);
-
-      return outputJSON({ ok: true, updated: oldId });
-    }
-  }
-
-  return outputJSON({ ok: false, error: "RDV introuvable" });
-}
-
-function detecterConflit(data, ignoreId) {
-  if (!data.Date || !data.Technicien) return { bloquant: false };
-
-  const debut = new Date(data.Date + "T" + data.Heure + ":00");
-  const fin = new Date(debut.getTime() + Number(data["Durée"] || 1) * 60 * 60 * 1000);
-
-  const absences = getAbsences().filter(a =>
-    String(a.Salarie) === String(data.Technicien) &&
-    dateDansPeriode(data.Date, a.DateDebut, a.DateFin)
-  );
-
-  if (absences.length > 0) {
-    return {
-      bloquant: true,
-      message: data.Technicien + " est absent le " + data.Date + " (" + absences[0].Type + ")"
-    };
-  }
-
-  const existing = getPlanningRows().filter(r =>
-    String(r.ID) !== String(ignoreId || "") &&
-    String(r.Technicien) === String(data.Technicien) &&
-    normaliserDatePourApp(r.Date) === data.Date
-  );
-
-  for (let i = 0; i < existing.length; i++) {
-    const r = existing[i];
-    const d2 = new Date(r.Date + "T" + r.Heure + ":00");
-    const f2 = new Date(d2.getTime() + Number(r["Durée"] || 1) * 60 * 60 * 1000);
-    if (debut < f2 && fin > d2) {
-      return { bloquant: true, message: "Conflit : " + data.Technicien + " a déjà un RDV à cette heure." };
-    }
-  }
-
-  if (data.Courtoisie && data.Courtoisie !== "Aucun") {
-    const prets = getPretsVehicules().filter(p =>
-      String(p.Vehicule) === String(data.Courtoisie) &&
-      dateDansPeriode(data.Date, p.DateDebut, p.DateFin)
-    );
-    if (prets.length > 0) {
-      return { bloquant: true, message: "Véhicule de courtoisie déjà prêté : " + data.Courtoisie };
-    }
-  }
-
-  return { bloquant: false };
-}
-
-function dateDansPeriode(dateIso, debutIso, finIso) {
-  const d = dateDepuisTexte(dateIso);
-  const deb = dateDepuisTexte(debutIso);
-  const fin = dateDepuisTexte(finIso || debutIso);
-  return d >= deb && d <= fin;
-}
-
-function supprimerRDV(id) {
-  if (!id) return outputJSON({ ok: false, error: "ID manquant" });
-
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  garantirColonnes(sheet);
-
-  const values = sheet.getDataRange().getDisplayValues();
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-
-    if (String(r[0]) === String(id)) {
-      supprimerEvent(CALENDARS.atelier, r[11]);
-
-      const idTechCal = getTechnicienAgendaId(r[7]);
-      if (idTechCal) supprimerEvent(idTechCal, r[12]);
-
-      const idCourtoisieCal = getCourtoisieAgendaId(r[9]);
-      if (idCourtoisieCal && r[9] !== "Aucun") supprimerEvent(idCourtoisieCal, r[13]);
-
-      sheet.deleteRow(i + 1);
-      return outputJSON({ ok: true, deleted: id });
-    }
-  }
-
-  return outputJSON({ ok: false, error: "RDV introuvable" });
-}
-
-/* =========================
-   SMS
-========================= */
-
-function envoyerSmsConfirmationAuto(id) {
-  const rdv = trouverRDVParId(id);
-  if (!rdv) return outputJSON({ ok: false, error: "RDV introuvable" });
-
-  const joursAvant = differenceJours(new Date(), dateDepuisTexte(rdv.Date));
-
-  if (joursAvant < 2) return outputJSON({ ok: true, skipped: "RDV trop proche, SMS non envoyé" });
-
-  const result = envoyerSmsOVH(rdv["Téléphone"], messageConfirmation(rdv));
-
-  if (!result.ok) return outputJSON({ ok: false, error: result.error, detail: result });
-
-  marquerSms(id, "confirmation");
-  return outputJSON({ ok: true, sms: result });
-}
-
-function envoyerSmsConfirmationManuel(id) {
-  const rdv = trouverRDVParId(id);
-
-  if (!rdv) return pageMessage("RDV introuvable", "Impossible de retrouver ce rendez-vous.", false);
-
-  const result = envoyerSmsOVH(rdv["Téléphone"], messageConfirmation(rdv));
-
-  if (!result.ok) return pageMessage("Erreur SMS OVH", result.error + "<br><br><pre>" + JSON.stringify(result, null, 2) + "</pre>", false);
-
-  marquerSms(id, "confirmation");
-  return pageMessage("SMS RDV envoyé", "Le SMS de confirmation du rendez-vous a bien été envoyé au client.", true);
-}
-
-function envoyerSmsVehiculePret(id) {
-  const rdv = trouverRDVParId(id);
-
-  if (!rdv) return pageMessage("RDV introuvable", "Impossible de retrouver ce rendez-vous.", false);
-
-  const message =
-    "Bonjour " + formuleClient(rdv) + ",\n\n" +
-    "Votre véhicule est prêt.\n\n" +
-    "Vous pouvez venir le récupérer pendant nos horaires d'ouverture.\n\n" +
-    "À bientôt,\n" +
-    "L'équipe ADN CAMPER\n" +
-    "VERFEIL";
-
-  const result = envoyerSmsOVH(rdv["Téléphone"], message);
-
-  if (!result.ok) return pageMessage("Erreur SMS OVH", result.error + "<br><br><pre>" + JSON.stringify(result, null, 2) + "</pre>", false);
-
-  marquerSms(id, "pret");
-  return pageMessage("SMS véhicule prêt envoyé", "Le SMS véhicule prêt a bien été envoyé au client.", true);
-}
-
-function RAPPEL_SMS_JOUR_J_MOINS_1() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  garantirColonnes(sheet);
-
-  const values = sheet.getDataRange().getDisplayValues();
-  const demain = new Date();
-  demain.setDate(demain.getDate() + 1);
-  const demainTxt = Utilities.formatDate(demain, "Europe/Paris", "yyyy-MM-dd");
-
-  for (let i = 1; i < values.length; i++) {
-    const r = values[i];
-
-    const id = r[0];
-    const dateRdv = normaliserDatePourApp(r[1]);
-    const smsRappel = r[16];
-    const dateCreation = normaliserDatePourApp(r[18]);
-
-    if (!id || dateRdv !== demainTxt || smsRappel) continue;
-
-    const joursEntreCreationEtRdv = differenceJours(dateDepuisTexte(dateCreation), dateDepuisTexte(dateRdv));
-    if (joursEntreCreationEtRdv < 2) continue;
-
-    const rdv = ligneVersRdv(r);
-
-    const message =
-      "Bonjour " + formuleClient(rdv) + ",\n\n" +
-      "Nous vous rappelons votre rendez-vous prévu demain à " +
-      rdv.Heure + ".\n\n" +
-      "Votre véhicule sera pris en charge par " + rdv.Technicien + ".\n\n" +
-      "À demain,\n" +
-      "L'équipe ADN CAMPER\n" +
-      "VERFEIL";
-
-    const result = envoyerSmsOVH(rdv["Téléphone"], message);
-
-    if (result.ok) marquerSms(id, "rappel");
-  }
-}
-
-function messageConfirmation(rdv) {
-  return "Bonjour " + formuleClient(rdv) + ",\n\n" +
-    "Votre rendez-vous chez ADN CAMPER est confirmé le " +
-    formatDateFr(rdv.Date) + " à " + rdv.Heure + ".\n\n" +
-    "Votre véhicule sera pris en charge par " + rdv.Technicien + ".\n\n" +
-    "Merci pour votre confiance.\n\n" +
-    "À bientôt,\n" +
-    "L'équipe ADN CAMPER\n" +
-    "VERFEIL";
-}
-
-function envoyerSmsOVH(numero, message) {
-  if (!OVH_SMS_ENABLED) return { ok: false, error: "SMS désactivé" };
-
-  const to = normaliserNumeroTel(numero);
-
-  if (!to) return { ok: false, error: "Numéro de téléphone invalide" };
-
-  const params = {
-    account: OVH_SMS_ACCOUNT,
-    login: OVH_SMS_LOGIN,
-    password: OVH_SMS_PASSWORD,
-    from: OVH_SMS_FROM,
-    to: to,
-    message: message,
-    noStop: "1"
-  };
-
-  const query = Object.keys(params)
-    .map(function(k) { return encodeURIComponent(k) + "=" + encodeURIComponent(params[k]); })
-    .join("&");
-
-  const url = "https://www.ovh.com/cgi-bin/sms/http2sms.cgi?" + query;
-
-  const response = UrlFetchApp.fetch(url, {
-    method: "get",
-    muteHttpExceptions: true
-  });
-
-  const code = response.getResponseCode();
-  const body = response.getContentText();
-
-  Logger.log("SMS OVH CODE : " + code);
-  Logger.log("SMS OVH REPONSE : " + body);
-  Logger.log("SMS OVH TO : " + to);
-
-  const bodyUpper = String(body).toUpperCase();
-
-  if (code !== 200) return { ok: false, error: "Erreur OVH HTTP " + code + " : " + body, code: code, body: body, to: to };
-
-  if (
-    bodyUpper.includes("KO") ||
-    bodyUpper.includes("ERROR") ||
-    bodyUpper.includes("INVALID") ||
-    bodyUpper.includes("BAD") ||
-    bodyUpper.includes("FORBIDDEN") ||
-    bodyUpper.includes("DENIED")
-  ) {
-    return { ok: false, error: "Erreur OVH : " + body, code: code, body: body, to: to };
-  }
-
-  return { ok: true, code: code, body: body, to: to };
-}
-
-/* =========================
-   OUTILS RDV
-========================= */
-
-function trouverRDVParId(id) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  garantirColonnes(sheet);
-
-  const values = sheet.getDataRange().getDisplayValues();
-
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]) === String(id)) return ligneVersRdv(values[i]);
-  }
-
-  return null;
-}
-
-function ligneVersRdv(r) {
-  return {
-    ID: r[0],
-    Date: normaliserDatePourApp(r[1]),
-    Heure: normaliserHeurePourApp(r[2]),
-    Client: r[3],
-    "Véhicule": r[4],
-    "Téléphone": normaliserNumeroTel(r[5]),
-    Travaux: r[6],
-    Technicien: r[7],
-    "Durée": normaliserDuree(r[8]),
-    Courtoisie: r[9],
-    Statut: r[10],
-    Civilite: r[14] || "",
-    SmsConfirmation: r[15] || "",
-    SmsRappel: r[16] || "",
-    SmsPret: r[17] || "",
-    DateCreation: r[18] || ""
-  };
-}
-
-function marquerSms(id, type) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  garantirColonnes(sheet);
-
-  const values = sheet.getDataRange().getDisplayValues();
-  const maintenant = Utilities.formatDate(new Date(), "Europe/Paris", "yyyy-MM-dd HH:mm");
-
-  let col = 0;
-  if (type === "confirmation") col = 16;
-  if (type === "rappel") col = 17;
-  if (type === "pret") col = 18;
-
-  if (!col) return;
-
-  for (let i = 1; i < values.length; i++) {
-    if (String(values[i][0]) === String(id)) {
-      sheet.getRange(i + 1, col).setValue(maintenant);
-      return;
-    }
-  }
-}
-
-function preparerData(d) {
-  return {
-    ID: d.ID || d.id || new Date().getTime(),
-    Date: normaliserDatePourApp(d.Date),
-    Heure: normaliserHeurePourApp(d.Heure),
-    Client: (d.Client || "").toUpperCase(),
-    "Véhicule": d["Véhicule"] || "",
-    "Téléphone": normaliserNumeroTel(d["Téléphone"]),
-    Travaux: d.Travaux || "",
-    Technicien: d.Technicien || "",
-    "Durée": normaliserDuree(d["Durée"]),
-    Courtoisie: d.Courtoisie || "Aucun",
-    Statut: d.Statut || "À faire",
-    Civilite: d.Civilite || d.Civilité || ""
-  };
-}
-
-function garantirColonnes(sheet) {
-  const titres = [
-    "ID", "Date", "Heure", "Client", "Véhicule", "Téléphone", "Travaux",
-    "Technicien", "Durée", "Courtoisie", "Statut",
-    "EventAtelier", "EventTech", "EventCourtoisie",
-    "Civilité", "SmsConfirmation", "SmsRappel", "SmsPret", "DateCreation"
-  ];
-
-  for (let i = 0; i < titres.length; i++) {
-    const cell = sheet.getRange(1, i + 1);
-    if (!cell.getValue()) cell.setValue(titres[i]);
-  }
-}
-
-function creerEvenementsAgenda(d) {
-  const client = d.Client || "Client";
-  const vehicule = d["Véhicule"] || "";
-  const travaux = d.Travaux || "";
-  const telephone = d["Téléphone"] || "";
-  const technicien = d.Technicien || "";
-  const courtoisie = d.Courtoisie || "";
-  const duree = Number(d["Durée"] || 1);
-
-  const titre = client + (vehicule ? " - " + vehicule : "");
-
-  const description =
-    "ID RDV : " + d.ID + "\n" +
-    "Client : " + client + "\n" +
-    "Téléphone : " + telephone + "\n" +
-    "Véhicule : " + vehicule + "\n" +
-    "Travaux : " + travaux + "\n" +
-    "Technicien : " + technicien + "\n" +
-    "Courtoisie : " + courtoisie + "\n" +
-    "Statut : " + (d.Statut || "");
-
-  const debut = new Date(d.Date + "T" + d.Heure + ":00");
-  const fin = new Date(debut.getTime() + duree * 60 * 60 * 1000);
-
-  return creerDansAgendas(titre, description, debut, fin, technicien, courtoisie);
-}
-
-function creerDansAgendas(titre, description, debut, fin, technicien, courtoisie) {
-  const result = { atelier: "", tech: "", courtoisie: "" };
-
-  const agendaAtelier = CalendarApp.getCalendarById(CALENDARS.atelier);
-  if (agendaAtelier) {
-    const ev = agendaAtelier.createEvent(titre, debut, fin, { description: description });
-    result.atelier = ev.getId();
-  }
-
-  const idTech = getTechnicienAgendaId(technicien);
-  if (idTech) {
-    const agendaTech = CalendarApp.getCalendarById(idTech);
-    if (agendaTech) {
-      const ev = agendaTech.createEvent(titre, debut, fin, { description: description });
-      result.tech = ev.getId();
-    }
-  }
-
-  const idCourtoisie = getCourtoisieAgendaId(courtoisie);
-  if (idCourtoisie && courtoisie !== "Aucun") {
-    const agendaCourtoisie = CalendarApp.getCalendarById(idCourtoisie);
-    if (agendaCourtoisie) {
-      const ev = agendaCourtoisie.createEvent("Réservé - " + titre, debut, fin, { description: description });
-      result.courtoisie = ev.getId();
-    }
-  }
-
-  return result;
-}
-
-function supprimerEvent(calendarId, eventId) {
-  if (!calendarId || !eventId) return;
-
-  try {
-    const calendar = CalendarApp.getCalendarById(calendarId);
-    if (!calendar) return;
-
-    const event = calendar.getEventById(eventId);
-    if (event) event.deleteEvent();
-  } catch (err) {
-    Logger.log("Erreur suppression event : " + err);
-  }
-}
-
-/* =========================
-   NORMALISATION
-========================= */
-
-function normaliserNumeroTel(numero) {
-  if (!numero) return "";
-
-  let n = String(numero).trim().replace(/[^\d+]/g, "");
-
-  if (n.startsWith("+33")) return n;
-  if (n.startsWith("0033")) return "+33" + n.substring(4);
-  if (n.startsWith("33") && n.length >= 11) return "+33" + n.substring(2);
-  if (n.match(/^0[67]\d{8}$/)) return "+33" + n.substring(1);
-  if (n.match(/^[67]\d{8}$/)) return "+33" + n;
-
-  return n;
-}
-
-function formuleClient(rdv) {
-  const nom = String(rdv.Client || "").toUpperCase();
-  const civ = rdv.Civilite || rdv["Civilité"] || "";
-
-  if (civ === "Madame") return "Mme " + nom;
-  if (civ === "Monsieur") return "M. " + nom;
-
-  return nom;
-}
-
-function formatDateFr(dateIso) {
-  const d = dateDepuisTexte(dateIso);
-  return Utilities.formatDate(d, "Europe/Paris", "dd/MM/yyyy");
-}
-
-function dateDepuisTexte(txt) {
-  if (!txt) return new Date();
-
-  const p = String(txt).split("-");
-
-  if (p.length === 3) return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
-
-  return new Date(txt);
-}
-
-function differenceJours(date1, date2) {
-  const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
-  const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
-
-  return Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
-}
-
-function normaliserDatePourApp(value) {
-  if (!value) return "";
-
-  const txt = String(value).trim();
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(txt)) return txt;
-
-  const fr = txt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-
-  if (fr) return fr[3] + "-" + String(fr[2]).padStart(2, "0") + "-" + String(fr[1]).padStart(2, "0");
-
-  const d = new Date(value);
-
-  if (!isNaN(d)) return Utilities.formatDate(d, "Europe/Paris", "yyyy-MM-dd");
-
-  return txt;
-}
-
-function normaliserHeurePourApp(value) {
-  if (!value) return "";
-
-  const txt = String(value).trim();
-  const match = txt.match(/^(\d{1,2}):(\d{2})/);
-
-  if (match) return String(match[1]).padStart(2, "0") + ":" + match[2];
-
-  const d = new Date(value);
-
-  if (!isNaN(d)) return Utilities.formatDate(d, "Europe/Paris", "HH:mm");
-
-  return txt;
-}
-
-function normaliserDuree(value) {
-  if (!value) return 1;
-
-  const txt = String(value).replace(",", ".").replace("h", ".").trim();
-  const n = Number(txt);
-
-  return isNaN(n) ? 1 : n;
-}
-
-/* =========================
-   SORTIES
-========================= */
-
-function outputJSON(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function outputJSONP(callback, obj) {
-  const safeCallback = String(callback || "").replace(/[^\w$.]/g, "");
-  const js = safeCallback + "(" + JSON.stringify(obj) + ");";
-
-  return ContentService
-    .createTextOutput(js)
-    .setMimeType(ContentService.MimeType.JAVASCRIPT);
-}
-
-function pageMessage(titre, message, succes) {
-  const couleur = succes ? "#16a34a" : "#dc2626";
-  const icone = succes ? "✅" : "⚠️";
-
-  const html = `
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${titre}</title>
+<title>Planning ADN Camper</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111827">
+
 <style>
-body{margin:0;font-family:Arial,sans-serif;background:#eef2f7;color:#111827;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.box{background:white;border-radius:22px;padding:30px;width:90%;max-width:540px;text-align:center;box-shadow:0 12px 35px #0003}
-h1{margin-top:0;color:${couleur};font-size:28px}
-p{font-size:18px;line-height:1.5}
-pre{text-align:left;white-space:pre-wrap;background:#f3f4f6;padding:12px;border-radius:12px;font-size:13px}
-button{background:#111827;color:white;border:0;border-radius:12px;padding:14px 22px;font-weight:bold;font-size:16px;margin-top:18px}
-.small{margin-top:12px;color:#6b7280;font-size:14px}
+body{margin:0;font-family:Arial;background:#eef2f7;color:#111827}
+header{background:#111827;color:white;padding:16px;text-align:center}
+.container{padding:12px;max-width:1700px;margin:auto}
+.card{background:white;border-radius:16px;padding:12px;margin-bottom:12px;box-shadow:0 4px 14px #0002}
+.topbar{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+button{background:#111827;color:white;border:0;border-radius:10px;padding:10px 14px;font-weight:bold;cursor:pointer}
+button.secondary{background:#2563eb}
+button.green{background:#16a34a}
+button.orange{background:#f97316}
+button.danger{background:#dc2626}
+button.small{padding:5px 8px;font-size:12px;margin-top:4px}
+select,input,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid #d1d5db;font-size:15px;box-sizing:border-box}
+textarea{min-height:90px}
+.legend,.charge{display:flex;gap:10px;flex-wrap:wrap}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:5px}
+.chargebox{padding:8px 10px;border-radius:10px;background:#f3f4f6;font-weight:bold}
+.ok{background:#dcfce7;color:#166534}
+.warn{background:#fef3c7;color:#92400e}
+.full{background:#fee2e2;color:#991b1b}
+
+.agenda-wrap{overflow-x:auto}
+.agenda{display:grid;grid-template-columns:70px repeat(6,minmax(170px,1fr));min-width:1150px;position:relative}
+.agenda-header{background:#111827;color:white;padding:10px;text-align:center;border-radius:10px;margin:2px;font-weight:bold}
+.hour-cell{height:48px;background:#e5e7eb;border-radius:8px;margin:2px;display:flex;align-items:flex-start;justify-content:center;font-weight:bold;font-size:13px;padding-top:4px;box-sizing:border-box}
+.day-cell{height:48px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin:2px;cursor:pointer;box-sizing:border-box}
+.day-cell:hover{outline:2px dashed #2563eb;background:#eff6ff}
+.closed-cell{height:32px;background:#f3f4f6;border:1px dashed #9ca3af;border-radius:8px;margin:2px;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:12px;font-weight:bold}
+.event{position:absolute;left:6px;right:6px;border-radius:10px;padding:8px;font-size:13px;box-shadow:0 2px 8px #0003;cursor:pointer;z-index:5;overflow:hidden;box-sizing:border-box}
+.event b{font-size:14px}
+.Maxime{background:#bfdbfe;border-left:5px solid #2563eb}
+.Joël{background:#bbf7d0;border-left:5px solid #16a34a}
+.Guillaume{background:#fed7aa;border-left:5px solid #f97316}
+.Gaël{background:#fecaca;border-left:5px solid #dc2626}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#e5e7eb;font-size:12px;margin:2px}
+
+.modal{display:none;position:fixed;inset:0;background:#0008;z-index:99;align-items:center;justify-content:center;padding:12px}
+.modal-content{background:white;border-radius:18px;padding:18px;max-width:900px;width:100%;box-shadow:0 10px 30px #0005;max-height:90vh;overflow:auto}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.actions button{flex:1;min-width:120px}
+
+.courtoisie-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.courtoisie-day{background:#f9fafb;border-radius:12px;padding:10px;border:1px solid #e5e7eb}
+.courtoisie-line{padding:8px;border-radius:10px;margin:6px 0}
+.libre{background:#dcfce7;color:#166534}
+.occupe{background:#fee2e2;color:#991b1b}
+
+@media(max-width:700px){
+  .agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}
+  .event{font-size:12px}
+}
 </style>
 </head>
+
 <body>
-  <div class="box">
-    <h1>${icone} ${titre}</h1>
-    <p>${message}</p>
-    <button onclick="window.close()">Fermer</button>
-    <div class="small">Cette fenêtre va se fermer automatiquement.</div>
+
+<header>
+  <h1>Planning ADN Camper</h1>
+  <p>Vue semaine atelier • SMS client • Pause 12h-14h</p>
+</header>
+
+<div class="container">
+
+  <div class="card topbar">
+    <button onclick="changerSemaine(-7)">← Semaine précédente</button>
+    <button class="secondary" onclick="aujourdhui()">Aujourd'hui</button>
+    <button onclick="changerSemaine(7)">Semaine suivante →</button>
+    <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
+    <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
+
+    <select id="filtreTech" style="width:auto" onchange="afficher()">
+      <option value="Tous">Tous les techniciens</option>
+      <option>Maxime</option>
+      <option>Joël</option>
+      <option>Guillaume</option>
+      <option>Gaël</option>
+      <option value="Courtoisie">Avec véhicule courtoisie</option>
+    </select>
+
+    <strong id="titreSemaine"></strong>
   </div>
+
+  <div class="card legend">
+    <span><span class="dot" style="background:#2563eb"></span>Maxime</span>
+    <span><span class="dot" style="background:#16a34a"></span>Joël</span>
+    <span><span class="dot" style="background:#f97316"></span>Guillaume</span>
+    <span><span class="dot" style="background:#dc2626"></span>Gaël</span>
+    <span><b>Fermé :</b> 12h00 → 14h00</span>
+  </div>
+
+  <div class="card charge" id="chargeAtelier"></div>
+
+  <div class="card agenda-wrap">
+    <div id="agenda" class="agenda"></div>
+  </div>
+
+</div>
+
+<div id="modalForm" class="modal">
+  <div class="modal-content">
+    <h2 id="formTitle">Ajouter un rendez-vous</h2>
+
+    <div class="formgrid">
+      <select id="civilite">
+        <option value="">Civilité</option>
+        <option>Monsieur</option>
+        <option>Madame</option>
+      </select>
+
+      <input id="client" placeholder="Nom client *">
+      <input id="telephone" type="tel" inputmode="tel" placeholder="Téléphone mobile client">
+      <input id="vehicule" placeholder="Véhicule">
+      <input id="date" type="date">
+      <input id="heure" type="time">
+      <select id="duree"></select>
+
+      <select id="technicien">
+        <option value="">Technicien *</option>
+        <option>Maxime</option>
+        <option>Joël</option>
+        <option>Guillaume</option>
+        <option>Gaël</option>
+      </select>
+
+      <select id="courtoisie">
+        <option>Aucun</option>
+        <option>Berlingo</option>
+        <option>208</option>
+        <option>Up</option>
+      </select>
+
+      <select id="statut">
+        <option>À faire</option>
+        <option>En cours</option>
+        <option>Terminé</option>
+        <option>En attente pièces</option>
+      </select>
+    </div>
+
+    <textarea id="travaux" placeholder="Travaux à réaliser"></textarea>
+
+    <div class="actions">
+      <button onclick="fermerFormulaire()">Annuler</button>
+      <button class="secondary" onclick="enregistrerFormulaire()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalDetail" class="modal">
+  <div class="modal-content">
+    <h2>Détails du rendez-vous</h2>
+    <div id="detailContent"></div>
+
+    <div class="actions">
+      <button onclick="fermerDetail()">Fermer</button>
+      <button class="secondary" onclick="modifierDepuisDetail()">✏️ Modifier</button>
+      <button class="green" onclick="smsConfirmation()">📲 SMS RDV</button>
+      <button class="orange" onclick="smsVehiculePret()">🚐 Véhicule prêt</button>
+      <button class="danger" onclick="supprimerRDV()">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalCourtoisie" class="modal">
+  <div class="modal-content">
+    <h2>🚗 Disponibilités véhicules de courtoisie</h2>
+    <div id="courtoisieContent" class="courtoisie-grid"></div>
+    <div class="actions">
+      <button onclick="fermerCourtoisie()">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <script>
-setTimeout(function(){try{window.close();}catch(e){}},2500);
+const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TFDS7x4Khpeo8jNp4UhEJRjY_le2NDumuHhR-Qkvfeg0-X/exec";
+
+let interventions = [];
+let dateBase = new Date();
+let rdvSelectionne = null;
+let modeEdition = false;
+let editionId = null;
+
+const joursNoms = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+const techniciens = ["Maxime","Joël","Guillaume","Gaël"];
+const vehiculesCourtoisie = ["Berlingo","208","Up"];
+
+const heures = [
+  "08:30","09:00","09:30","10:00","10:30","11:00","11:30",
+  "12:00",
+  "14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"
+];
+
+const SLOT_HEIGHT = 52;
+
+function remplirDurees(){
+  const select = document.getElementById("duree");
+  select.innerHTML = "";
+
+  for(let h=0.5; h<=50; h+=0.5){
+    const o=document.createElement("option");
+    o.value=h.toString();
+    o.textContent = h===0.5 ? "30 min" : h%1===0 ? h+"h" : Math.floor(h)+"h30";
+    select.appendChild(o);
+  }
+
+  select.value="1";
+}
+
+function formatDuree(v){
+  const h=Number(v||0);
+  if(h===0.5)return"30 min";
+  if(h%1===0)return h+"h";
+  return Math.floor(h)+"h30";
+}
+
+function normaliserHeure(v){
+  if(!v)return"";
+
+  if(typeof v==="string"){
+    const m=v.match(/(\d{1,2}):(\d{2})/);
+    if(m)return String(m[1]).padStart(2,"0")+":"+m[2];
+  }
+
+  const d=new Date(v);
+  if(!isNaN(d)){
+    return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  }
+
+  return"";
+}
+
+function normaliserDate(v){
+  if(!v)return"";
+
+  if(typeof v==="string"){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;
+
+    const fr=v.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if(fr)return fr[3]+"-"+fr[2]+"-"+fr[1];
+  }
+
+  const d=new Date(v);
+  if(isNaN(d))return"";
+
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function dateObj(str){
+  const [y,m,d]=str.split("-").map(Number);
+  return new Date(y,m-1,d);
+}
+
+function formatDate(d){
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function formatFR(d){
+  return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
+}
+
+function minutesDepuisMinuit(h){
+  const p=h.split(":");
+  return Number(p[0])*60+Number(p[1]);
+}
+
+function heureDepuisMinutes(min){
+  const h=Math.floor(min/60);
+  const m=min%60;
+  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+}
+
+function lundiDeLaSemaine(date){
+  const d=new Date(date);
+  const day=d.getDay();
+  const diff=d.getDate()-day+(day===0?-6:1);
+  return new Date(d.setDate(diff));
+}
+
+function prochainJourOuvre(d){
+  const n=new Date(d);
+  do{
+    n.setDate(n.getDate()+1);
+  }while(n.getDay()===0);
+  return n;
+}
+
+function ajusterHeureOuverture(heureMin){
+  if(heureMin < 510) return 510;
+  if(heureMin >= 720 && heureMin < 840) return 840;
+  return heureMin;
+}
+
+function genererSegments(rdv){
+  let segments=[];
+  let restant=Number(rdv.duree||1)*60;
+  let jour=dateObj(rdv.date);
+  let heureMin=minutesDepuisMinuit(rdv.heure);
+
+  while(restant>0 && segments.length<40){
+
+    if(jour.getDay()===0){
+      jour=prochainJourOuvre(jour);
+      heureMin=510;
+      continue;
+    }
+
+    heureMin = ajusterHeureOuverture(heureMin);
+
+    if(heureMin >= 1080){
+      jour=prochainJourOuvre(jour);
+      heureMin=510;
+      continue;
+    }
+
+    let limite = heureMin < 720 ? 720 : 1080;
+    let dispo = limite - heureMin;
+    let pris = Math.min(restant, dispo);
+
+    if(pris > 0){
+      segments.push({
+        id:rdv.id,
+        rdv:rdv,
+        date:formatDate(jour),
+        heure:heureDepuisMinutes(heureMin),
+        minutes:pris
+      });
+
+      restant -= pris;
+      heureMin += pris;
+    } else {
+      if(heureMin < 840){
+        heureMin = 840;
+      } else {
+        jour=prochainJourOuvre(jour);
+        heureMin=510;
+      }
+    }
+  }
+
+  return segments;
+}
+
+function chargerPlanning(){
+  const callbackName = "callbackPlanning_" + Date.now();
+
+  window[callbackName] = function(data){
+    try{
+      interventions=data.map(x=>({
+        id:x.ID,
+        date:normaliserDate(x.Date),
+        heure:normaliserHeure(x.Heure),
+        client:x.Client,
+        vehicule:x["Véhicule"],
+        telephone:formaterTelephoneSMS(x["Téléphone"]),
+        travaux:x.Travaux,
+        technicien:x.Technicien,
+        duree:Number(String(x["Durée"]).replace(",","."))||1,
+        courtoisie:x.Courtoisie,
+        statut:x.Statut,
+        civilite:x.Civilite || x["Civilité"] || "",
+        smsConfirmation:x.SmsConfirmation || "",
+        smsRappel:x.SmsRappel || "",
+        smsPret:x.SmsPret || ""
+      })).filter(x=>x.date&&x.heure);
+
+      afficher();
+    }catch(e){
+      alert("Erreur lecture planning : " + e);
+    }
+
+    delete window[callbackName];
+
+    const oldScript = document.getElementById(callbackName);
+    if(oldScript) oldScript.remove();
+  };
+
+  const script = document.createElement("script");
+  script.id = callbackName;
+  script.src = API_URL + "?callback=" + callbackName + "&t=" + Date.now();
+
+  script.onerror = function(){
+    alert("Impossible de charger le planning Google Sheets.");
+    delete window[callbackName];
+  };
+
+  document.body.appendChild(script);
+}
+
+function afficher(){
+  const lundi=lundiDeLaSemaine(dateBase);
+  const agenda=document.getElementById("agenda");
+  agenda.innerHTML="";
+
+  const fin=new Date(lundi);
+  fin.setDate(lundi.getDate()+5);
+
+  document.getElementById("titreSemaine").innerText="Semaine du "+formatFR(lundi)+" au "+formatFR(fin);
+
+  let dates=[];
+
+  agenda.innerHTML+=`<div class="agenda-header">Heure</div>`;
+
+  for(let i=0;i<6;i++){
+    const j=new Date(lundi);
+    j.setDate(lundi.getDate()+i);
+
+    const dt=formatDate(j);
+    dates.push(dt);
+
+    agenda.innerHTML+=`<div class="agenda-header">${joursNoms[i]}<br>${formatFR(j)}</div>`;
+  }
+
+  heures.forEach(h=>{
+    if(h==="12:00"){
+      agenda.innerHTML+=`<div class="hour-cell">12h-14h</div>`;
+      dates.forEach(()=>{
+        agenda.innerHTML+=`<div class="closed-cell">FERMÉ</div>`;
+      });
+      return;
+    }
+
+    agenda.innerHTML+=`<div class="hour-cell">${h}</div>`;
+
+    dates.forEach(dt=>{
+      agenda.innerHTML+=`
+        <div class="day-cell"
+          ondragover="event.preventDefault()"
+          ondrop="deposerRDV(event,'${dt}','${h}')"
+          onclick="ouvrirDepuisCreneau('${dt}','${h}')">
+        </div>`;
+    });
+  });
+
+  afficherCharge(dates);
+  setTimeout(()=>placerEvenements(dates),0);
+}
+
+function rdvVisible(r){
+  const f=document.getElementById("filtreTech").value;
+
+  if(f==="Tous")return true;
+  if(f==="Courtoisie")return r.courtoisie&&r.courtoisie!=="Aucun";
+
+  return r.technicien===f;
+}
+
+function placerEvenements(dates){
+  const agenda=document.getElementById("agenda");
+  const cells=agenda.querySelectorAll(".day-cell");
+  const heuresSansFermeture = heures.filter(h=>h!=="12:00");
+
+  let items=[];
+
+  interventions.filter(rdvVisible).forEach(r=>{
+    const segments=genererSegments(r).filter(s=>dates.includes(s.date));
+
+    segments.forEach(seg=>{
+      const dayIndex=dates.indexOf(seg.date);
+      const hIndex=heuresSansFermeture.indexOf(seg.heure);
+
+      if(dayIndex<0||hIndex<0)return;
+
+      const cell=cells[hIndex*6+dayIndex];
+      if(!cell)return;
+
+      const startMin=minutesDepuisMinuit(seg.heure);
+      const endMin=startMin+seg.minutes;
+
+      items.push({
+        r:r,
+        seg:seg,
+        dayIndex:dayIndex,
+        hIndex:hIndex,
+        cell:cell,
+        startMin:startMin,
+        endMin:endMin,
+        col:0,
+        colCount:1
+      });
+    });
+  });
+
+  dates.forEach((dt,dayIndex)=>{
+    const dayItems=items
+      .filter(x=>x.dayIndex===dayIndex)
+      .sort((a,b)=>a.startMin-b.startMin || b.endMin-a.endMin);
+
+    let clusters=[];
+    let currentCluster=[];
+    let clusterEnd=-1;
+
+    dayItems.forEach(item=>{
+      if(currentCluster.length===0){
+        currentCluster=[item];
+        clusterEnd=item.endMin;
+        return;
+      }
+
+      if(item.startMin < clusterEnd){
+        currentCluster.push(item);
+        clusterEnd=Math.max(clusterEnd,item.endMin);
+      }else{
+        clusters.push(currentCluster);
+        currentCluster=[item];
+        clusterEnd=item.endMin;
+      }
+    });
+
+    if(currentCluster.length>0){
+      clusters.push(currentCluster);
+    }
+
+    clusters.forEach(cluster=>{
+      let columnEnds=[];
+
+      cluster.forEach(item=>{
+        let assigned=false;
+
+        for(let c=0;c<columnEnds.length;c++){
+          if(item.startMin>=columnEnds[c]){
+            item.col=c;
+            columnEnds[c]=item.endMin;
+            assigned=true;
+            break;
+          }
+        }
+
+        if(!assigned){
+          item.col=columnEnds.length;
+          columnEnds.push(item.endMin);
+        }
+      });
+
+      const colCount=Math.max(1,columnEnds.length);
+      cluster.forEach(item=>{
+        item.colCount=colCount;
+      });
+    });
+  });
+
+  items.forEach(item=>{
+    const r=item.r;
+    const seg=item.seg;
+    const cell=item.cell;
+
+    const rectA=agenda.getBoundingClientRect();
+    const rectC=cell.getBoundingClientRect();
+
+    const gap=3;
+    const innerWidth=rectC.width-4;
+    const colWidth=innerWidth/item.colCount;
+
+    const ev=document.createElement("div");
+    ev.className="event "+(r.technicien||"");
+    ev.draggable=true;
+    ev.ondragstart=e=>e.dataTransfer.setData("text/plain",String(r.id));
+
+    ev.style.top=(rectC.top-rectA.top+agenda.scrollTop+2)+"px";
+    ev.style.left=(rectC.left-rectA.left+agenda.scrollLeft+2+(item.col*colWidth))+"px";
+    ev.style.width=Math.max(45,(colWidth-gap))+"px";
+    ev.style.height=Math.max(44,(seg.minutes/30)*SLOT_HEIGHT-6)+"px";
+    ev.style.zIndex=String(10+item.col);
+
+    ev.innerHTML=`
+      <b>${seg.heure} - ${r.client||""}</b><br>
+      ${r.vehicule||""}<br>
+      ${r.travaux||""}<br>
+      <span class="badge">${r.technicien||""}</span>
+      <span class="badge">${formatDuree(r.duree)}</span>
+      ${r.courtoisie&&r.courtoisie!=="Aucun"?`<span class="badge">🚗 ${r.courtoisie}</span>`:""}<br>
+      <button class="secondary small" onclick="event.stopPropagation();ouvrirModification('${r.id}')">✏️ Modifier</button>
+    `;
+
+    ev.onclick=e=>{
+      e.stopPropagation();
+      ouvrirDetail(String(r.id));
+    };
+
+    ev.ondblclick=e=>{
+      e.stopPropagation();
+      ouvrirModification(String(r.id));
+    };
+
+    agenda.appendChild(ev);
+  });
+}
+
+function afficherCharge(dates){
+  const box=document.getElementById("chargeAtelier");
+  const auj=dates[0];
+
+  box.innerHTML="";
+
+  techniciens.forEach(t=>{
+    const h=chargeJour(t,auj);
+    const cls=h>=7?"full":h>=5?"warn":"ok";
+
+    box.innerHTML+=`<div class="chargebox ${cls}">${t} : ${formatDuree(h)} / 7h</div>`;
+  });
+}
+
+function ouvrirDepuisCreneau(d,h){
+  modeEdition=false;
+  editionId=null;
+
+  document.getElementById("formTitle").innerText="Ajouter un rendez-vous";
+
+  viderFormulaire();
+
+  date.value=d;
+  heure.value=h;
+
+  modalForm.style.display="flex";
+}
+
+function ouvrirFormulaire(){
+  modeEdition=false;
+  editionId=null;
+
+  document.getElementById("formTitle").innerText="Ajouter un rendez-vous";
+
+  viderFormulaire();
+
+  modalForm.style.display="flex";
+}
+
+function ouvrirModification(id){
+  const r=interventions.find(x=>String(x.id)===String(id));
+
+  if(!r)return;
+
+  modeEdition=true;
+  editionId=r.id;
+  rdvSelectionne=r;
+
+  document.getElementById("formTitle").innerText="Modifier le rendez-vous";
+
+  civilite.value=r.civilite||"";
+  client.value=r.client||"";
+  telephone.value=r.telephone||"";
+  vehicule.value=r.vehicule||"";
+  travaux.value=r.travaux||"";
+  date.value=r.date||"";
+  heure.value=r.heure||"";
+  duree.value=String(r.duree||1);
+  technicien.value=r.technicien||"";
+  courtoisie.value=r.courtoisie||"Aucun";
+  statut.value=r.statut||"À faire";
+
+  modalDetail.style.display="none";
+  modalForm.style.display="flex";
+}
+
+function fermerFormulaire(){
+  modalForm.style.display="none";
+}
+
+function viderFormulaire(){
+  civilite.value="";
+  client.value="";
+  telephone.value="";
+  vehicule.value="";
+  travaux.value="";
+  date.value="";
+  heure.value="";
+  duree.value="1";
+  technicien.value="";
+  courtoisie.value="Aucun";
+  statut.value="À faire";
+}
+
+function lireForm(){
+  return{
+    id:modeEdition?editionId:Date.now(),
+    civilite:civilite.value,
+    client:client.value.trim(),
+    telephone:formaterTelephoneSMS(telephone.value),
+    vehicule:vehicule.value.trim(),
+    travaux:travaux.value.trim(),
+    date:date.value,
+    heure:normaliserHeure(heure.value),
+    duree:Number(duree.value),
+    technicien:technicien.value,
+    courtoisie:courtoisie.value,
+    statut:statut.value
+  };
+}
+
+function enregistrerFormulaire(){
+  modeEdition ? modifierRDV() : ajouter();
+}
+
+function ajouter(){
+  const item=lireForm();
+
+  if(!item.client||!item.date||!item.heure||!item.technicien){
+    alert("Il faut au minimum client, date, heure et technicien.");
+    return;
+  }
+
+  fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      ID:item.id,
+      Civilite:item.civilite,
+      Date:item.date,
+      Heure:item.heure,
+      Client:item.client,
+      "Véhicule":item.vehicule,
+      "Téléphone":item.telephone,
+      Travaux:item.travaux,
+      Technicien:item.technicien,
+      "Durée":item.duree,
+      Courtoisie:item.courtoisie,
+      Statut:item.statut
+    })
+  })
+  .then(()=>{
+    fermerFormulaire();
+    setTimeout(chargerPlanning,800);
+  })
+  .catch(()=>alert("Erreur lors de l'enregistrement."));
+}
+
+function modifierRDV(){
+  const item=lireForm();
+
+  if(!item.client||!item.date||!item.heure||!item.technicien){
+    alert("Il faut au minimum client, date, heure et technicien.");
+    return;
+  }
+
+  fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      action:"update",
+      OldID:editionId,
+      ID:item.id,
+      Civilite:item.civilite,
+      Date:item.date,
+      Heure:item.heure,
+      Client:item.client,
+      "Véhicule":item.vehicule,
+      "Téléphone":item.telephone,
+      Travaux:item.travaux,
+      Technicien:item.technicien,
+      "Durée":item.duree,
+      Courtoisie:item.courtoisie,
+      Statut:item.statut
+    })
+  })
+  .then(()=>{
+    fermerFormulaire();
+    fermerDetail();
+    setTimeout(chargerPlanning,800);
+  })
+  .catch(()=>alert("Erreur lors de la modification."));
+}
+
+function deposerRDV(e,d,h){
+  const id=e.dataTransfer.getData("text/plain");
+  const r=interventions.find(x=>String(x.id)===String(id));
+
+  if(!r)return;
+
+  rdvSelectionne=r;
+  modeEdition=true;
+  editionId=r.id;
+
+  civilite.value=r.civilite||"";
+  client.value=r.client||"";
+  telephone.value=r.telephone||"";
+  vehicule.value=r.vehicule||"";
+  travaux.value=r.travaux||"";
+  date.value=d;
+  heure.value=h;
+  duree.value=String(r.duree);
+  technicien.value=r.technicien||"";
+  courtoisie.value=r.courtoisie||"Aucun";
+  statut.value=r.statut||"À faire";
+
+  modifierRDV();
+}
+
+function ouvrirDetail(id){
+  const r=interventions.find(x=>String(x.id)===String(id));
+
+  if(!r)return;
+
+  rdvSelectionne=r;
+
+  const smsConf = r.smsConfirmation ? "✅ SMS RDV envoyé : " + r.smsConfirmation : "❌ SMS RDV non envoyé";
+  const smsPret = r.smsPret ? "✅ SMS véhicule prêt : " + r.smsPret : "❌ SMS véhicule prêt non envoyé";
+
+  detailContent.innerHTML=`
+    <p><b>Civilité :</b> ${r.civilite||""}</p>
+    <p><b>Client :</b> ${r.client||""}</p>
+    <p><b>Téléphone :</b> ${r.telephone||""}</p>
+    <p><b>Véhicule :</b> ${r.vehicule||""}</p>
+    <p><b>Date / Heure :</b> ${r.date||""} à ${r.heure||""}</p>
+    <p><b>Durée :</b> ${formatDuree(r.duree)}</p>
+    <p><b>Technicien :</b> ${r.technicien||""}</p>
+    <p><b>Courtoisie :</b> ${r.courtoisie||"Aucun"}</p>
+    <p><b>Statut :</b> ${r.statut||""}</p>
+    <p><b>Travaux :</b><br>${r.travaux||""}</p>
+    <hr>
+    <p>${smsConf}</p>
+    <p>${smsPret}</p>
+  `;
+
+  modalDetail.style.display="flex";
+}
+
+function fermerDetail(){
+  modalDetail.style.display="none";
+  rdvSelectionne=null;
+}
+
+function modifierDepuisDetail(){
+  if(!rdvSelectionne)return;
+  ouvrirModification(String(rdvSelectionne.id));
+}
+
+function supprimerRDV(){
+  if(!rdvSelectionne)return;
+
+  if(!confirm("Supprimer ce RDV partout ?"))return;
+
+  fetch(API_URL+"?action=delete&id="+encodeURIComponent(rdvSelectionne.id)+"&t="+Date.now())
+    .then(r=>r.json())
+    .then(res=>{
+      if(res.ok){
+        fermerDetail();
+        chargerPlanning();
+      }else{
+        alert("Suppression impossible");
+      }
+    })
+    .catch(()=>alert("Erreur lors de la suppression."));
+}
+
+function formaterTelephoneSMS(numero){
+  let n = String(numero || "")
+    .trim()
+    .replace(/\s/g,"")
+    .replace(/\./g,"")
+    .replace(/-/g,"")
+    .replace(/\(/g,"")
+    .replace(/\)/g,"");
+
+  if(!n) return "";
+
+  if(n.startsWith("+33")) return n;
+  if(n.startsWith("0033")) return "+33" + n.substring(4);
+  if(n.startsWith("33")) return "+33" + n.substring(2);
+  if(n.startsWith("0")) return "+33" + n.substring(1);
+  if(n.startsWith("6") || n.startsWith("7")) return "+33" + n;
+
+  return n;
+}
+
+function formuleClientSMS(rdv){
+  const nom = rdv.client || "";
+  const civ = rdv.civilite || "";
+
+  if(civ === "Madame") return "Mme " + nom;
+  if(civ === "Monsieur") return "M. " + nom;
+
+  return nom;
+}
+
+function formatDateFRSMS(dateIso){
+  if(!dateIso) return "";
+  const p = String(dateIso).split("-");
+  if(p.length === 3){
+    return p[2] + "/" + p[1] + "/" + p[0];
+  }
+  return dateIso;
+}
+
+function ouvrirSmsManuel(numero, message){
+  const tel = formaterTelephoneSMS(numero);
+
+  if(!tel){
+    alert("Aucun téléphone valide pour ce client.");
+    return;
+  }
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if(isMobile){
+    window.location.href = "sms:" + tel + "?body=" + encodeURIComponent(message);
+    return;
+  }
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(message).then(()=>{
+      alert(
+        "Planning ouvert sur PC.\n\n" +
+        "Le message SMS a été copié.\n\n" +
+        "Numéro client : " + tel + "\n\n" +
+        "Tu peux le coller dans ton logiciel SMS ou l'envoyer depuis une tablette."
+      );
+    }).catch(()=>{
+      prompt("Copie ce SMS pour le client " + tel + " :", message);
+    });
+  }else{
+    prompt("Copie ce SMS pour le client " + tel + " :", message);
+  }
+}
+
+function appelerAppsScriptParIframe(action, id){
+  return new Promise((resolve)=>{
+    const callbackName = "callbackSMS_" + Date.now();
+
+    window[callbackName] = function(res){
+      delete window[callbackName];
+
+      const script = document.getElementById(callbackName);
+      if(script) script.remove();
+
+      if(res && res.ok){
+        resolve(true);
+      }else{
+        alert(
+          "Erreur lors de l'envoi du SMS :\n\n" +
+          (res && res.error ? res.error : JSON.stringify(res))
+        );
+        resolve(false);
+      }
+    };
+
+    const script = document.createElement("script");
+    script.id = callbackName;
+    script.src =
+      API_URL +
+      "?action=" + encodeURIComponent(action) +
+      "&id=" + encodeURIComponent(id) +
+      "&callback=" + encodeURIComponent(callbackName) +
+      "&t=" + Date.now();
+
+    script.onerror = function(){
+      delete window[callbackName];
+      alert("Impossible de contacter Apps Script pour envoyer le SMS.");
+      resolve(false);
+    };
+
+    document.body.appendChild(script);
+  });
+}
+
+function smsConfirmation(){
+  if(!rdvSelectionne){
+    alert("Aucun rendez-vous sélectionné.");
+    return;
+  }
+
+  if(!rdvSelectionne.telephone){
+    alert("Aucun téléphone renseigné pour ce client.");
+    return;
+  }
+
+  appelerAppsScriptParIframe("sms_confirm", rdvSelectionne.id)
+    .then((ok)=>{
+      if(ok){
+        setTimeout(()=>{
+          chargerPlanning();
+          fermerDetail();
+        }, 800);
+      }
+    });
+}
+
+function smsVehiculePret(){
+  if(!rdvSelectionne){
+    alert("Aucun rendez-vous sélectionné.");
+    return;
+  }
+
+  if(!rdvSelectionne.telephone){
+    alert("Aucun téléphone renseigné pour ce client.");
+    return;
+  }
+
+  appelerAppsScriptParIframe("sms_ready", rdvSelectionne.id)
+    .then((ok)=>{
+      if(ok){
+        setTimeout(()=>{
+          chargerPlanning();
+          fermerDetail();
+        }, 800);
+      }
+    });
+}
+
+function ouvrirCourtoisie(){
+  const lundi=lundiDeLaSemaine(dateBase);
+
+  courtoisieContent.innerHTML="";
+
+  for(let i=0;i<6;i++){
+    const j=new Date(lundi);
+    j.setDate(lundi.getDate()+i);
+
+    const dt=formatDate(j);
+
+    let html=`<div class="courtoisie-day"><h3>${joursNoms[i]} ${formatFR(j)}</h3>`;
+
+    vehiculesCourtoisie.forEach(v=>{
+      const resa=interventions.find(x=>x.date===dt&&x.courtoisie===v);
+
+      html+=resa
+        ? `<div class="courtoisie-line occupe"><b>🚗 ${v} : Réservé</b><br>${resa.client||""}<br>${resa.heure||""}</div>`
+        : `<div class="courtoisie-line libre"><b>🚗 ${v} : Libre</b></div>`;
+    });
+
+    html+=`</div>`;
+
+    courtoisieContent.innerHTML+=html;
+  }
+
+  modalCourtoisie.style.display="flex";
+}
+
+function fermerCourtoisie(){
+  modalCourtoisie.style.display="none";
+}
+
+function chargeJour(tech,jour){
+  let total = 0;
+
+  interventions
+    .filter(i=>i.technicien===tech)
+    .forEach(i=>{
+      const segments = genererSegments(i);
+      segments.forEach(s=>{
+        if(s.date === jour){
+          total += s.minutes / 60;
+        }
+      });
+    });
+
+  return total;
+}
+
+function changerSemaine(nb){
+  dateBase.setDate(dateBase.getDate()+nb);
+  afficher();
+}
+
+function aujourdhui(){
+  dateBase=new Date();
+  afficher();
+}
+
+if("serviceWorker"in navigator){
+  navigator.serviceWorker.register("service-worker.js");
+}
+
+window.addEventListener("resize",()=>afficher());
+
+remplirDurees();
+chargerPlanning();
 </script>
+
 </body>
 </html>
-`;
-
-  return HtmlService.createHtmlOutput(html);
-}
-
-function envoyerSmsConfirmationSilencieux(id) {
-  const rdv = trouverRDVParId(id);
-
-  if (!rdv) return { ok: false, error: "RDV introuvable" };
-
-  const result = envoyerSmsOVH(rdv["Téléphone"], messageConfirmation(rdv));
-
-  if (!result.ok) return { ok: false, error: result.error || "Erreur OVH", detail: result };
-
-  marquerSms(id, "confirmation");
-  return { ok: true };
-}
-
-function envoyerSmsVehiculePretSilencieux(id) {
-  const rdv = trouverRDVParId(id);
-
-  if (!rdv) return { ok: false, error: "RDV introuvable" };
-
-  const message =
-    "Bonjour " + formuleClient(rdv) + ",\n\n" +
-    "Votre véhicule est prêt.\n\n" +
-    "Vous pouvez venir le récupérer pendant nos horaires d'ouverture.\n\n" +
-    "À bientôt,\n" +
-    "L'équipe ADN CAMPER\n" +
-    "VERFEIL";
-
-  const result = envoyerSmsOVH(rdv["Téléphone"], message);
-
-  if (!result.ok) return { ok: false, error: result.error || "Erreur OVH", detail: result };
-
-  marquerSms(id, "pret");
-  return { ok: true };
-}
