@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper</title>
+<title>Planning ADN Camper V4.3</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -55,6 +55,16 @@ textarea{min-height:90px}
 .libre{background:#dcfce7;color:#166534}
 .occupe{background:#fee2e2;color:#991b1b}
 
+
+.bilan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
+.bilan-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
+.bilan-card h3{margin:0 0 8px 0;color:#111827;font-size:15px}
+.bilan-big{font-size:28px;font-weight:bold;color:#111827}
+.table{width:100%;border-collapse:collapse;margin-top:12px}
+.table th,.table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;font-size:14px}
+.table th{background:#f3f4f6}
+.info{background:#eff6ff;color:#1d4ed8;padding:10px;border-radius:12px;margin:8px 0}
+
 @media(max-width:700px){
   .agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}
   .event{font-size:12px}
@@ -65,8 +75,8 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper</h1>
-  <p>Vue semaine atelier • SMS client • Pause 12h-14h</p>
+  <h1>Planning ADN Camper V4.3</h1>
+  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Bilan absences</p>
 </header>
 
 <div class="container">
@@ -77,6 +87,7 @@ textarea{min-height:90px}
     <button onclick="changerSemaine(7)">Semaine suivante →</button>
     <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
     <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
+    <button class="orange" onclick="ouvrirBilanAbsences()">📊 Bilan absences</button>
 
     <select id="filtreTech" style="width:auto" onchange="afficher()">
       <option value="Tous">Tous les techniciens</option>
@@ -178,6 +189,35 @@ textarea{min-height:90px}
     <div class="actions">
       <button onclick="fermerCourtoisie()">Fermer</button>
     </div>
+  </div>
+</div>
+
+
+<div id="modalBilanAbsences" class="modal">
+  <div class="modal-content">
+    <h2>📊 Bilan absences salarié</h2>
+    <div class="info">
+      Sélectionne un salarié et une période pour calculer les jours et heures d'absence.
+      Le calcul est basé sur 7 h par jour ouvré, dimanche exclu.
+    </div>
+
+    <div class="formgrid">
+      <select id="bilanSalarie">
+        <option>Maxime</option>
+        <option>Joël</option>
+        <option>Guillaume</option>
+        <option>Gaël</option>
+      </select>
+      <input id="bilanDebut" type="date">
+      <input id="bilanFin" type="date">
+    </div>
+
+    <div class="actions">
+      <button class="secondary" onclick="calculerBilanAbsences()">Calculer</button>
+      <button onclick="fermerBilanAbsences()">Fermer</button>
+    </div>
+
+    <div id="bilanAbsencesResultat"></div>
   </div>
 </div>
 
@@ -849,6 +889,133 @@ function supprimerRDV(){
       }
     })
     .catch(()=>alert("Erreur lors de la suppression."));
+}
+
+
+function apiGetJSONP(action, params){
+  return new Promise(function(resolve){
+    const callbackName = "callbackApi_" + action + "_" + Date.now();
+
+    window[callbackName] = function(data){
+      delete window[callbackName];
+      const oldScript = document.getElementById(callbackName);
+      if(oldScript) oldScript.remove();
+      resolve(data);
+    };
+
+    const query = new URLSearchParams(params || {});
+    query.set("action", action);
+    query.set("callback", callbackName);
+    query.set("t", Date.now());
+
+    const script = document.createElement("script");
+    script.id = callbackName;
+    script.src = API_URL + "?" + query.toString();
+
+    script.onerror = function(){
+      delete window[callbackName];
+      const oldScript = document.getElementById(callbackName);
+      if(oldScript) oldScript.remove();
+      resolve({ok:false,error:"Impossible de contacter Apps Script"});
+    };
+
+    document.body.appendChild(script);
+  });
+}
+
+function ouvrirBilanAbsences(){
+  const today = new Date();
+  const first = new Date(today.getFullYear(), today.getMonth(), 1);
+  const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+  if(!bilanDebut.value) bilanDebut.value = formatDate(first);
+  if(!bilanFin.value) bilanFin.value = formatDate(last);
+
+  bilanAbsencesResultat.innerHTML = "";
+  modalBilanAbsences.style.display = "flex";
+}
+
+function fermerBilanAbsences(){
+  modalBilanAbsences.style.display = "none";
+}
+
+function calculerBilanAbsences(){
+  const salarie = bilanSalarie.value;
+  const debut = bilanDebut.value;
+  const fin = bilanFin.value;
+
+  if(!salarie || !debut || !fin){
+    alert("Choisis un salarié, une date début et une date fin.");
+    return;
+  }
+
+  bilanAbsencesResultat.innerHTML = '<div class="info">Calcul en cours...</div>';
+
+  apiGetJSONP("absence_report", {
+    salarie: salarie,
+    debut: debut,
+    fin: fin
+  }).then(function(res){
+    if(!res || res.ok === false){
+      bilanAbsencesResultat.innerHTML =
+        '<div class="info">Erreur : ' + (res && res.error ? escapeHtml(res.error) : "calcul impossible") + '</div>';
+      return;
+    }
+
+    let html = "";
+    html += '<div class="bilan-grid">';
+    html += '<div class="bilan-card"><h3>Salarié</h3><div class="bilan-big" style="font-size:22px">' + escapeHtml(res.salarie || "") + '</div></div>';
+    html += '<div class="bilan-card"><h3>Jours ouvrés absents</h3><div class="bilan-big">' + (res.totalJoursOuvres || 0) + '</div></div>';
+    html += '<div class="bilan-card"><h3>Heures d’absence</h3><div class="bilan-big">' + (res.totalHeures || 0) + ' h</div></div>';
+    html += '</div>';
+
+    html += '<h3>Détail par type</h3>';
+    html += '<table class="table"><thead><tr><th>Type</th><th>Jours ouvrés</th><th>Heures</th></tr></thead><tbody>';
+
+    if((res.detailParType || []).length === 0){
+      html += '<tr><td colspan="3">Aucune absence trouvée sur cette période.</td></tr>';
+    }else{
+      (res.detailParType || []).forEach(function(t){
+        html += '<tr>';
+        html += '<td>' + escapeHtml(t.Type || "") + '</td>';
+        html += '<td>' + (t.JoursOuvres || 0) + '</td>';
+        html += '<td>' + (t.Heures || 0) + ' h</td>';
+        html += '</tr>';
+      });
+    }
+
+    html += '</tbody></table>';
+
+    html += '<h3>Détail des absences</h3>';
+    html += '<table class="table"><thead><tr><th>Type</th><th>Du</th><th>Au</th><th>Jours</th><th>Heures</th><th>Commentaire</th></tr></thead><tbody>';
+
+    if((res.absences || []).length === 0){
+      html += '<tr><td colspan="6">Aucune absence trouvée.</td></tr>';
+    }else{
+      (res.absences || []).forEach(function(a){
+        html += '<tr>';
+        html += '<td>' + escapeHtml(a.Type || "") + '</td>';
+        html += '<td>' + escapeHtml(a.DateDebut || "") + '</td>';
+        html += '<td>' + escapeHtml(a.DateFin || "") + '</td>';
+        html += '<td>' + (a.JoursOuvres || 0) + '</td>';
+        html += '<td>' + (a.Heures || 0) + ' h</td>';
+        html += '<td>' + escapeHtml(a.Commentaire || "") + '</td>';
+        html += '</tr>';
+      });
+    }
+
+    html += '</tbody></table>';
+    bilanAbsencesResultat.innerHTML = html;
+  });
+}
+
+function escapeHtml(str){
+  return String(str || "")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
 }
 
 function formaterTelephoneSMS(numero){
