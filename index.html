@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper V4.3</title>
+<title>Planning ADN Camper V4.3 complet</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -60,10 +60,14 @@ textarea{min-height:90px}
 .table{width:100%;border-collapse:collapse;margin-top:12px}
 .table th,.table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;font-size:14px}
 .table th{background:#f3f4f6}
+.gray{background:#6b7280}
 .bilan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
 .bilan-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
 .bilan-card h3{margin:0 0 8px 0;color:#111827;font-size:15px}
 .bilan-big{font-size:28px;font-weight:bold;color:#111827}
+.searchbar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.searchbar input{flex:1;min-width:220px}
+.result-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin:8px 0}
 
 @media(max-width:700px){
   .agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}
@@ -75,8 +79,8 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper V4.3</h1>
-  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences salariés</p>
+  <h1>Planning ADN Camper V4.3 complet</h1>
+  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences • Salariés • Recherche client</p>
 </header>
 
 <div class="container">
@@ -89,6 +93,8 @@ textarea{min-height:90px}
     <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
     <button class="secondary" onclick="ouvrirAbsencesSalaries()">🏖️ Absences salariés</button>
     <button class="orange" onclick="ouvrirBilanAbsences()">📊 Bilan absences</button>
+    <button class="gray" onclick="ouvrirSalaries()">👤 Salariés</button>
+    <button class="secondary" onclick="ouvrirHistoriqueClient()">🔎 Recherche client</button>
 
     <select id="filtreTech" style="width:auto" onchange="afficher()">
       <option value="Tous">Tous les techniciens</option>
@@ -199,7 +205,6 @@ textarea{min-height:90px}
     <h2>🏖️ Absences salariés</h2>
     <div class="info">
       Ajoute ici les absences des salariés : congés, RTT, maladie, formation ou absence exceptionnelle.
-      L'absence sera enregistrée dans Google Sheets et dans l'agenda du salarié si le Code.gs est configuré.
     </div>
 
     <div class="formgrid">
@@ -273,11 +278,62 @@ textarea{min-height:90px}
   </div>
 </div>
 
+<div id="modalSalaries" class="modal">
+  <div class="modal-content">
+    <h2>👤 Gestion des salariés</h2>
+    <div class="info">
+      Ajouter un salarié crée automatiquement son agenda Google si le Code.gs est configuré.
+      Désactiver conserve l'historique.
+    </div>
+
+    <div class="formgrid">
+      <input id="salNom" placeholder="Nom du salarié">
+      <input id="salCouleur" type="color" value="#6b7280">
+      <input id="salTelephone" placeholder="Téléphone">
+      <input id="salEmail" placeholder="Email">
+    </div>
+
+    <div class="actions">
+      <button class="green" onclick="ajouterSalarie()">➕ Ajouter salarié</button>
+      <button onclick="fermerSalaries()">Fermer</button>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Actif</th>
+          <th>Couleur</th>
+          <th>Téléphone</th>
+          <th>Email</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="listeSalaries"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="modalHistoriqueClient" class="modal">
+  <div class="modal-content">
+    <h2>🔎 Recherche / historique client</h2>
+
+    <div class="searchbar">
+      <input id="historiqueRecherche" placeholder="Nom client, véhicule ou téléphone">
+      <button class="secondary" onclick="chercherHistoriqueClient()">Rechercher</button>
+      <button onclick="fermerHistoriqueClient()">Fermer</button>
+    </div>
+
+    <div id="historiqueContent"></div>
+  </div>
+</div>
+
 <script>
 const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TFDS7x4Khpeo8jNp4UhEJRjY_le2NDumuHhR-Qkvfeg0-X/exec";
 
 let interventions = [];
 let absencesSalaries = [];
+let salariesGestion = [];
 let dateBase = new Date();
 let rdvSelectionne = null;
 let modeEdition = false;
@@ -469,7 +525,11 @@ function chargerPlanning(){
       })).filter(x=>x.date&&x.heure);
 
       absencesSalaries = payload.absences || [];
+      salariesGestion = payload.salaries || [];
+
+      synchroniserSelectsV43();
       afficherAbsencesTable();
+      afficherSalariesTable();
       afficher();
     }catch(e){
       alert("Erreur lecture planning : " + e);
@@ -987,6 +1047,57 @@ function apiGetJSONP(action, params){
   });
 }
 
+function synchroniserSelectsV43(){
+  const actifs = (salariesGestion || []).filter(s => String(s.Actif || "").toUpperCase() === "OUI");
+  const noms = actifs.length ? actifs.map(s => s.Nom) : techniciens;
+
+  remplirSelectSimple(absenceSalarie, noms);
+  remplirSelectSimple(bilanSalarie, noms);
+
+  const filtre = document.getElementById("filtreTech");
+  if(filtre){
+    const oldValue = filtre.value || "Tous";
+    filtre.innerHTML = '<option value="Tous">Tous les techniciens</option>';
+    noms.forEach(n=>{
+      const o=document.createElement("option");
+      o.value=n;
+      o.textContent=n;
+      filtre.appendChild(o);
+    });
+    const c=document.createElement("option");
+    c.value="Courtoisie";
+    c.textContent="Avec véhicule courtoisie";
+    filtre.appendChild(c);
+    filtre.value = oldValue;
+  }
+
+  const tech = document.getElementById("technicien");
+  if(tech){
+    const oldTech = tech.value;
+    tech.innerHTML = '<option value="">Technicien *</option>';
+    noms.forEach(n=>{
+      const o=document.createElement("option");
+      o.value=n;
+      o.textContent=n;
+      tech.appendChild(o);
+    });
+    tech.value = oldTech;
+  }
+}
+
+function remplirSelectSimple(select, valeurs){
+  if(!select) return;
+  const oldValue = select.value;
+  select.innerHTML = "";
+  valeurs.forEach(v=>{
+    const o=document.createElement("option");
+    o.value=v;
+    o.textContent=v;
+    select.appendChild(o);
+  });
+  if(valeurs.includes(oldValue)) select.value = oldValue;
+}
+
 function ouvrirAbsencesSalaries(){
   const today = new Date();
   if(!absenceDebut.value) absenceDebut.value = formatDate(today);
@@ -1156,6 +1267,174 @@ function calculerBilanAbsences(){
   });
 }
 
+function ouvrirSalaries(){
+  afficherSalariesTable();
+  modalSalaries.style.display = "flex";
+}
+
+function fermerSalaries(){
+  modalSalaries.style.display = "none";
+}
+
+function ajouterSalarie(){
+  const nom = salNom.value.trim();
+  if(!nom){
+    alert("Nom du salarié obligatoire.");
+    return;
+  }
+
+  apiPost({
+    action:"add_employee",
+    Nom:nom,
+    Couleur:salCouleur.value || "#6b7280",
+    Telephone:salTelephone.value || "",
+    Email:salEmail.value || ""
+  }).then(res=>{
+    if(res && res.ok === false){
+      alert(res.error || "Impossible d'ajouter le salarié.");
+      return;
+    }
+
+    salNom.value = "";
+    salTelephone.value = "";
+    salEmail.value = "";
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>{
+    alert("Erreur lors de l'ajout du salarié.");
+  });
+}
+
+function desactiverSalarie(nom){
+  if(!confirm("Désactiver " + nom + " ? L'historique sera conservé.")) return;
+
+  apiPost({
+    action:"delete_employee",
+    Nom:nom
+  }).then(res=>{
+    if(res && res.ok === false){
+      alert(res.error || "Impossible de désactiver le salarié.");
+      return;
+    }
+
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>{
+    alert("Erreur lors de la désactivation.");
+  });
+}
+
+function reactiverSalarie(nom){
+  apiPost({
+    action:"reactivate_employee",
+    Nom:nom
+  }).then(res=>{
+    if(res && res.ok === false){
+      alert(res.error || "Impossible de réactiver le salarié.");
+      return;
+    }
+
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>{
+    alert("Erreur lors de la réactivation.");
+  });
+}
+
+function afficherSalariesTable(){
+  const tbody = document.getElementById("listeSalaries");
+  if(!tbody) return;
+
+  tbody.innerHTML = "";
+
+  if(!salariesGestion || salariesGestion.length === 0){
+    tbody.innerHTML = '<tr><td colspan="6">Aucun salarié trouvé.</td></tr>';
+    return;
+  }
+
+  salariesGestion.forEach(s=>{
+    const actif = String(s.Actif || "").toUpperCase() === "OUI";
+    tbody.innerHTML += `
+      <tr>
+        <td>${escapeHtml(s.Nom || "")}</td>
+        <td>${actif ? "Oui" : "Non"}</td>
+        <td><span class="dot" style="background:${s.Couleur || "#6b7280"}"></span>${escapeHtml(s.Couleur || "")}</td>
+        <td>${escapeHtml(s.Telephone || "")}</td>
+        <td>${escapeHtml(s.Email || "")}</td>
+        <td>
+          ${actif
+            ? `<button class="danger small" onclick="desactiverSalarie('${escapeJs(s.Nom || "")}')">Désactiver</button>`
+            : `<button class="green small" onclick="reactiverSalarie('${escapeJs(s.Nom || "")}')">Réactiver</button>`
+          }
+        </td>
+      </tr>`;
+  });
+}
+
+function ouvrirHistoriqueClient(){
+  historiqueRecherche.value = "";
+  historiqueContent.innerHTML = "";
+  modalHistoriqueClient.style.display = "flex";
+  setTimeout(()=>historiqueRecherche.focus(),100);
+}
+
+function fermerHistoriqueClient(){
+  modalHistoriqueClient.style.display = "none";
+}
+
+function chercherHistoriqueClient(){
+  const q = historiqueRecherche.value.trim();
+  if(!q){
+    alert("Saisis un nom client, un véhicule ou un téléphone.");
+    return;
+  }
+
+  historiqueContent.innerHTML = '<div class="info">Recherche en cours...</div>';
+
+  apiGetJSONP("client_history", {q:q}).then(function(res){
+    if(!res || res.ok === false){
+      historiqueContent.innerHTML =
+        '<div class="info">Erreur : ' + (res && res.error ? escapeHtml(res.error) : "recherche impossible") + '</div>';
+      return;
+    }
+
+    let html = "";
+    html += '<div class="bilan-grid">';
+    html += '<div class="bilan-card"><h3>Interventions</h3><div class="bilan-big">' + (res.totalRdv || 0) + '</div></div>';
+    html += '<div class="bilan-card"><h3>Prêts véhicules</h3><div class="bilan-big">' + (res.totalPrets || 0) + '</div></div>';
+    html += '<div class="bilan-card"><h3>Véhicules</h3><div>' + escapeHtml((res.vehicules || []).join(", ")) + '</div></div>';
+    html += '</div>';
+
+    html += '<h3>Historique interventions</h3>';
+    if((res.rdv || []).length === 0){
+      html += '<div class="info">Aucune intervention trouvée.</div>';
+    }else{
+      (res.rdv || []).forEach(function(r){
+        html += '<div class="result-card">';
+        html += '<b>' + escapeHtml(r.Date || "") + " - " + escapeHtml(r.Client || "") + '</b><br>';
+        html += 'Véhicule : ' + escapeHtml(r["Véhicule"] || "") + '<br>';
+        html += 'Technicien : ' + escapeHtml(r.Technicien || "") + ' • Durée : ' + formatDuree(r["Durée"] || 0) + '<br>';
+        html += 'Statut : ' + escapeHtml(r.Statut || "") + '<br>';
+        html += '<b>Travaux :</b><br>' + escapeHtml(r.Travaux || "");
+        html += '</div>';
+      });
+    }
+
+    html += '<h3>Historique prêts véhicules</h3>';
+    if((res.prets || []).length === 0){
+      html += '<div class="info">Aucun prêt véhicule trouvé.</div>';
+    }else{
+      (res.prets || []).forEach(function(p){
+        html += '<div class="result-card">';
+        html += '<b>' + escapeHtml(p.Client || "") + " - " + escapeHtml(p.Vehicule || "") + '</b><br>';
+        html += 'Du ' + escapeHtml(p.DateDebut || "") + ' au ' + escapeHtml(p.DateFin || "") + '<br>';
+        html += 'Téléphone : ' + escapeHtml(p.Telephone || "") + '<br>';
+        html += 'Commentaire : ' + escapeHtml(p.Commentaire || "");
+        html += '</div>';
+      });
+    }
+
+    historiqueContent.innerHTML = html;
+  });
+}
+
 function escapeHtml(str){
   return String(str || "")
     .replace(/&/g,"&amp;")
@@ -1163,6 +1442,10 @@ function escapeHtml(str){
     .replace(/>/g,"&gt;")
     .replace(/"/g,"&quot;")
     .replace(/'/g,"&#039;");
+}
+
+function escapeJs(str){
+  return String(str || "").replace(/\\/g,"\\\\").replace(/'/g,"\\'");
 }
 
 
