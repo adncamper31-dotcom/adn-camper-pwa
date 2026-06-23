@@ -56,14 +56,14 @@ textarea{min-height:90px}
 .occupe{background:#fee2e2;color:#991b1b}
 
 
+.info{background:#eff6ff;color:#1d4ed8;padding:10px;border-radius:12px;margin:8px 0}
+.table{width:100%;border-collapse:collapse;margin-top:12px}
+.table th,.table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;font-size:14px}
+.table th{background:#f3f4f6}
 .bilan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
 .bilan-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
 .bilan-card h3{margin:0 0 8px 0;color:#111827;font-size:15px}
 .bilan-big{font-size:28px;font-weight:bold;color:#111827}
-.table{width:100%;border-collapse:collapse;margin-top:12px}
-.table th,.table td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;font-size:14px}
-.table th{background:#f3f4f6}
-.info{background:#eff6ff;color:#1d4ed8;padding:10px;border-radius:12px;margin:8px 0}
 
 @media(max-width:700px){
   .agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}
@@ -76,7 +76,7 @@ textarea{min-height:90px}
 
 <header>
   <h1>Planning ADN Camper V4.3</h1>
-  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Bilan absences</p>
+  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences salariés</p>
 </header>
 
 <div class="container">
@@ -87,6 +87,7 @@ textarea{min-height:90px}
     <button onclick="changerSemaine(7)">Semaine suivante →</button>
     <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
     <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
+    <button class="secondary" onclick="ouvrirAbsencesSalaries()">🏖️ Absences salariés</button>
     <button class="orange" onclick="ouvrirBilanAbsences()">📊 Bilan absences</button>
 
     <select id="filtreTech" style="width:auto" onchange="afficher()">
@@ -193,6 +194,57 @@ textarea{min-height:90px}
 </div>
 
 
+<div id="modalAbsencesSalaries" class="modal">
+  <div class="modal-content">
+    <h2>🏖️ Absences salariés</h2>
+    <div class="info">
+      Ajoute ici les absences des salariés : congés, RTT, maladie, formation ou absence exceptionnelle.
+      L'absence sera enregistrée dans Google Sheets et dans l'agenda du salarié si le Code.gs est configuré.
+    </div>
+
+    <div class="formgrid">
+      <select id="absenceSalarie">
+        <option>Maxime</option>
+        <option>Joël</option>
+        <option>Guillaume</option>
+        <option>Gaël</option>
+      </select>
+
+      <select id="absenceType">
+        <option>Congé payé</option>
+        <option>RTT</option>
+        <option>Maladie</option>
+        <option>Formation</option>
+        <option>Absence exceptionnelle</option>
+        <option>Récupération</option>
+      </select>
+
+      <input id="absenceDebut" type="date">
+      <input id="absenceFin" type="date">
+      <input id="absenceCommentaire" placeholder="Commentaire">
+    </div>
+
+    <div class="actions">
+      <button class="green" onclick="ajouterAbsenceSalarie()">➕ Ajouter absence</button>
+      <button onclick="fermerAbsencesSalaries()">Fermer</button>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Salarié</th>
+          <th>Type</th>
+          <th>Du</th>
+          <th>Au</th>
+          <th>Commentaire</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="listeAbsencesSalaries"></tbody>
+    </table>
+  </div>
+</div>
+
 <div id="modalBilanAbsences" class="modal">
   <div class="modal-content">
     <h2>📊 Bilan absences salarié</h2>
@@ -225,6 +277,7 @@ textarea{min-height:90px}
 const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TFDS7x4Khpeo8jNp4UhEJRjY_le2NDumuHhR-Qkvfeg0-X/exec";
 
 let interventions = [];
+let absencesSalaries = [];
 let dateBase = new Date();
 let rdvSelectionne = null;
 let modeEdition = false;
@@ -415,6 +468,8 @@ function chargerPlanning(){
         smsPret:x.SmsPret || ""
       })).filter(x=>x.date&&x.heure);
 
+      absencesSalaries = payload.absences || [];
+      afficherAbsencesTable();
       afficher();
     }catch(e){
       alert("Erreur lecture planning : " + e);
@@ -892,6 +947,15 @@ function supprimerRDV(){
 }
 
 
+function apiPost(payload){
+  return fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify(payload)
+  }).then(r=>r.text()).then(txt=>{
+    try{return JSON.parse(txt);}catch(e){return {ok:true, raw:txt};}
+  });
+}
+
 function apiGetJSONP(action, params){
   return new Promise(function(resolve){
     const callbackName = "callbackApi_" + action + "_" + Date.now();
@@ -921,6 +985,89 @@ function apiGetJSONP(action, params){
 
     document.body.appendChild(script);
   });
+}
+
+function ouvrirAbsencesSalaries(){
+  const today = new Date();
+  if(!absenceDebut.value) absenceDebut.value = formatDate(today);
+  if(!absenceFin.value) absenceFin.value = formatDate(today);
+  afficherAbsencesTable();
+  modalAbsencesSalaries.style.display = "flex";
+}
+
+function fermerAbsencesSalaries(){
+  modalAbsencesSalaries.style.display = "none";
+}
+
+function ajouterAbsenceSalarie(){
+  if(!absenceSalarie.value || !absenceDebut.value){
+    alert("Choisis un salarié et une date de début.");
+    return;
+  }
+
+  apiPost({
+    action:"add_absence",
+    Salarie:absenceSalarie.value,
+    Type:absenceType.value,
+    DateDebut:absenceDebut.value,
+    DateFin:absenceFin.value || absenceDebut.value,
+    Commentaire:absenceCommentaire.value || ""
+  }).then(res=>{
+    if(res && res.ok === false){
+      alert(res.error || "Impossible d'ajouter l'absence.");
+      return;
+    }
+
+    absenceCommentaire.value = "";
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>{
+    alert("Erreur lors de l'ajout de l'absence.");
+  });
+}
+
+function supprimerAbsenceSalarie(id){
+  if(!confirm("Supprimer cette absence ?")) return;
+
+  apiPost({
+    action:"delete_absence",
+    ID:id
+  }).then(res=>{
+    if(res && res.ok === false){
+      alert(res.error || "Impossible de supprimer l'absence.");
+      return;
+    }
+
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>{
+    alert("Erreur lors de la suppression de l'absence.");
+  });
+}
+
+function afficherAbsencesTable(){
+  const tbody = document.getElementById("listeAbsencesSalaries");
+  if(!tbody) return;
+
+  tbody.innerHTML = "";
+
+  if(!absencesSalaries || absencesSalaries.length === 0){
+    tbody.innerHTML = '<tr><td colspan="6">Aucune absence enregistrée.</td></tr>';
+    return;
+  }
+
+  absencesSalaries
+    .slice()
+    .sort((a,b)=>String(b.DateDebut||"").localeCompare(String(a.DateDebut||"")))
+    .forEach(a=>{
+      tbody.innerHTML += `
+        <tr>
+          <td>${escapeHtml(a.Salarie || "")}</td>
+          <td>${escapeHtml(a.Type || "")}</td>
+          <td>${escapeHtml(a.DateDebut || "")}</td>
+          <td>${escapeHtml(a.DateFin || "")}</td>
+          <td>${escapeHtml(a.Commentaire || "")}</td>
+          <td><button class="danger small" onclick="supprimerAbsenceSalarie('${a.ID}')">Supprimer</button></td>
+        </tr>`;
+    });
 }
 
 function ouvrirBilanAbsences(){
@@ -1017,6 +1164,7 @@ function escapeHtml(str){
     .replace(/"/g,"&quot;")
     .replace(/'/g,"&#039;");
 }
+
 
 function formaterTelephoneSMS(numero){
   let n = String(numero || "")
