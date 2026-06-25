@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper V4.3 complet</title>
+<title>Planning ADN Camper V4.5</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -69,6 +69,14 @@ textarea{min-height:90px}
 .searchbar input{flex:1;min-width:220px}
 .result-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin:8px 0}
 
+
+.absence-event{position:absolute;border-radius:10px;padding:8px;font-size:13px;box-shadow:0 2px 8px #0002;z-index:3;box-sizing:border-box;overflow:hidden;pointer-events:none;border-left:5px solid #7c3aed;background:#ede9fe;color:#312e81}
+.absence-conge{background:#dcfce7;color:#166534;border-left-color:#16a34a}
+.absence-rtt{background:#fef3c7;color:#92400e;border-left-color:#f59e0b}
+.absence-maladie{background:#fee2e2;color:#991b1b;border-left-color:#dc2626}
+.absence-formation{background:#dbeafe;color:#1e40af;border-left-color:#2563eb}
+.absence-exceptionnelle{background:#ede9fe;color:#5b21b6;border-left-color:#7c3aed}
+
 @media(max-width:700px){
   .agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}
   .event{font-size:12px}
@@ -79,8 +87,8 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper V4.3 complet</h1>
-  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences • Salariés • Recherche client</p>
+  <h1>Planning ADN Camper V4.5</h1>
+  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences visibles • Salariés • Recherche client • Véhicules courtoisie</p>
 </header>
 
 <div class="container">
@@ -91,6 +99,7 @@ textarea{min-height:90px}
     <button onclick="changerSemaine(7)">Semaine suivante →</button>
     <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
     <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
+    <button class="green" onclick="ouvrirVehiculesCourtoisie()">🚙 Véhicules courtoisie</button>
     <button class="secondary" onclick="ouvrirAbsencesSalaries()">🏖️ Absences salariés</button>
     <button class="orange" onclick="ouvrirBilanAbsences()">📊 Bilan absences</button>
     <button class="gray" onclick="ouvrirSalaries()">👤 Salariés</button>
@@ -314,6 +323,38 @@ textarea{min-height:90px}
   </div>
 </div>
 
+
+<div id="modalVehiculesCourtoisie" class="modal">
+  <div class="modal-content">
+    <h2>🚙 Gestion des véhicules de courtoisie</h2>
+    <div class="info">
+      Ajoute, désactive ou réactive les véhicules de courtoisie sans toucher au code.
+      À l'ajout, un agenda Google nommé <b>ADN - Courtoisie NomDuVéhicule</b> est créé automatiquement.
+    </div>
+
+    <div class="formgrid">
+      <input id="vehCourtoisieNom" placeholder="Nom du véhicule, ex : Fiat 500, Berlingo, 208">
+    </div>
+
+    <div class="actions">
+      <button class="green" onclick="ajouterVehiculeCourtoisie()">➕ Ajouter véhicule</button>
+      <button onclick="fermerVehiculesCourtoisie()">Fermer</button>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Véhicule</th>
+          <th>Actif</th>
+          <th>Agenda Google</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="listeVehiculesCourtoisie"></tbody>
+    </table>
+  </div>
+</div>
+
 <div id="modalHistoriqueClient" class="modal">
   <div class="modal-content">
     <h2>🔎 Recherche / historique client</h2>
@@ -334,6 +375,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TF
 let interventions = [];
 let absencesSalaries = [];
 let salariesGestion = [];
+let vehiculesGestion = [];
 let dateBase = new Date();
 let rdvSelectionne = null;
 let modeEdition = false;
@@ -449,6 +491,14 @@ function ajusterHeureOuverture(heureMin){
   return heureMin;
 }
 
+function dateDansPeriode(dateIso, debutIso, finIso){
+  if(!dateIso || !debutIso) return false;
+  const d=dateObj(dateIso);
+  const deb=dateObj(debutIso);
+  const fin=dateObj(finIso || debutIso);
+  return d>=deb && d<=fin;
+}
+
 function genererSegments(rdv){
   let segments=[];
   let restant=Number(rdv.duree||1)*60;
@@ -526,10 +576,12 @@ function chargerPlanning(){
 
       absencesSalaries = payload.absences || [];
       salariesGestion = payload.salaries || [];
+      vehiculesGestion = payload.vehiculesCourtoisieTous || payload.vehiculesCourtoisie || [];
 
       synchroniserSelectsV43();
       afficherAbsencesTable();
       afficherSalariesTable();
+      afficherVehiculesCourtoisieTable();
       afficher();
     }catch(e){
       alert("Erreur lecture planning : " + e);
@@ -599,7 +651,7 @@ function afficher(){
   });
 
   afficherCharge(dates);
-  setTimeout(()=>placerEvenements(dates),0);
+  setTimeout(()=>{placerAbsences(dates);placerEvenements(dates)},0);
 }
 
 function rdvVisible(r){
@@ -752,13 +804,79 @@ function placerEvenements(dates){
   });
 }
 
+
+function classeAbsence(type){
+  const t=String(type||"").toLowerCase();
+  if(t.includes("congé") || t.includes("conge")) return "absence-conge";
+  if(t.includes("rtt")) return "absence-rtt";
+  if(t.includes("maladie")) return "absence-maladie";
+  if(t.includes("formation")) return "absence-formation";
+  return "absence-exceptionnelle";
+}
+
+function iconeAbsence(type){
+  const t=String(type||"").toLowerCase();
+  if(t.includes("congé") || t.includes("conge")) return "🌴";
+  if(t.includes("rtt")) return "🟡";
+  if(t.includes("maladie")) return "🤒";
+  if(t.includes("formation")) return "🎓";
+  return "🟣";
+}
+
+function absencePourSalarieEtJour(salarie, jour){
+  return (absencesSalaries || []).find(a=>
+    String(a.Salarie||"")===String(salarie||"") &&
+    dateDansPeriode(jour, a.DateDebut, a.DateFin)
+  );
+}
+
+function placerAbsences(dates){
+  const agenda=document.getElementById("agenda");
+  const cells=agenda.querySelectorAll(".day-cell");
+  const heuresSansFermeture=heures.filter(h=>h!=="12:00");
+  const filtre=document.getElementById("filtreTech").value;
+
+  dates.forEach((dt,dayIndex)=>{
+    const absJour=(absencesSalaries || []).filter(a=>dateDansPeriode(dt,a.DateDebut,a.DateFin));
+    const visibles=absJour.filter(a=>filtre==="Tous" || filtre==="Courtoisie" || String(a.Salarie)===String(filtre));
+
+    visibles.forEach((a,idx)=>{
+      const cell=cells[0*6+dayIndex];
+      if(!cell)return;
+
+      const rectA=agenda.getBoundingClientRect();
+      const rectC=cell.getBoundingClientRect();
+      const maxCols=Math.max(1, visibles.length);
+      const colWidth=Math.max(60,(rectC.width-12)/maxCols);
+
+      const ev=document.createElement("div");
+      ev.className="absence-event "+classeAbsence(a.Type);
+      ev.style.top=(rectC.top-rectA.top+agenda.scrollTop+2)+"px";
+      ev.style.left=(rectC.left-rectA.left+agenda.scrollLeft+6+(idx*colWidth))+"px";
+      ev.style.width=Math.max(55,colWidth-4)+"px";
+      ev.style.height=Math.max(80,(heuresSansFermeture.length*SLOT_HEIGHT)-8)+"px";
+      ev.innerHTML=`<b>${iconeAbsence(a.Type)} ${a.Salarie||""}</b><br>${a.Type||"Absence"}<br>${a.Commentaire||""}`;
+      agenda.appendChild(ev);
+    });
+  });
+}
+
 function afficherCharge(dates){
   const box=document.getElementById("chargeAtelier");
   const auj=dates[0];
 
   box.innerHTML="";
 
-  techniciens.forEach(t=>{
+  const noms=(salariesGestion||[]).filter(s=>String(s.Actif||"").toUpperCase()==="OUI").map(s=>s.Nom);
+  const liste=noms.length?noms:techniciens;
+
+  liste.forEach(t=>{
+    const absence=absencePourSalarieEtJour(t,auj);
+    if(absence){
+      box.innerHTML+=`<div class="chargebox full">${t} : Absent (${absence.Type||"Absence"})</div>`;
+      return;
+    }
+
     const h=chargeJour(t,auj);
     const cls=h>=7?"full":h>=5?"warn":"ok";
 
@@ -1083,6 +1201,25 @@ function synchroniserSelectsV43(){
     });
     tech.value = oldTech;
   }
+
+  const vehiculesActifs=(vehiculesGestion||[]).filter(v=>String(v.Actif||"").toUpperCase()==="OUI").map(v=>v.Nom);
+  if(vehiculesActifs.length){
+    vehiculesCourtoisie.splice(0,vehiculesCourtoisie.length);
+    vehiculesActifs.forEach(v=>vehiculesCourtoisie.push(v));
+  }
+
+  const courtoisieSelect=document.getElementById("courtoisie");
+  if(courtoisieSelect){
+    const oldCourtoisie=courtoisieSelect.value || "Aucun";
+    courtoisieSelect.innerHTML='<option>Aucun</option>';
+    vehiculesCourtoisie.forEach(v=>{
+      const o=document.createElement("option");
+      o.value=v;
+      o.textContent=v;
+      courtoisieSelect.appendChild(o);
+    });
+    courtoisieSelect.value=oldCourtoisie;
+  }
 }
 
 function remplirSelectSimple(select, valeurs){
@@ -1362,6 +1499,75 @@ function afficherSalariesTable(){
           ${actif
             ? `<button class="danger small" onclick="desactiverSalarie('${escapeJs(s.Nom || "")}')">Désactiver</button>`
             : `<button class="green small" onclick="reactiverSalarie('${escapeJs(s.Nom || "")}')">Réactiver</button>`
+          }
+        </td>
+      </tr>`;
+  });
+}
+
+
+function ouvrirVehiculesCourtoisie(){
+  afficherVehiculesCourtoisieTable();
+  modalVehiculesCourtoisie.style.display="flex";
+}
+
+function fermerVehiculesCourtoisie(){
+  modalVehiculesCourtoisie.style.display="none";
+}
+
+function ajouterVehiculeCourtoisie(){
+  const nom=vehCourtoisieNom.value.trim();
+  if(!nom){
+    alert("Nom du véhicule obligatoire.");
+    return;
+  }
+
+  apiPost({action:"add_courtesy_vehicle",Nom:nom}).then(res=>{
+    if(res && res.ok===false){
+      alert(res.error || "Impossible d'ajouter le véhicule.");
+      return;
+    }
+    vehCourtoisieNom.value="";
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>alert("Erreur lors de l'ajout du véhicule."));
+}
+
+function desactiverVehiculeCourtoisie(nom){
+  if(!confirm("Désactiver le véhicule de courtoisie "+nom+" ? L'historique sera conservé.")) return;
+  apiPost({action:"delete_courtesy_vehicle",Nom:nom}).then(res=>{
+    if(res && res.ok===false){alert(res.error || "Impossible de désactiver le véhicule.");return;}
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>alert("Erreur lors de la désactivation du véhicule."));
+}
+
+function reactiverVehiculeCourtoisie(nom){
+  apiPost({action:"reactivate_courtesy_vehicle",Nom:nom}).then(res=>{
+    if(res && res.ok===false){alert(res.error || "Impossible de réactiver le véhicule.");return;}
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>alert("Erreur lors de la réactivation du véhicule."));
+}
+
+function afficherVehiculesCourtoisieTable(){
+  const tbody=document.getElementById("listeVehiculesCourtoisie");
+  if(!tbody)return;
+  tbody.innerHTML="";
+
+  if(!vehiculesGestion || vehiculesGestion.length===0){
+    tbody.innerHTML='<tr><td colspan="4">Aucun véhicule trouvé.</td></tr>';
+    return;
+  }
+
+  vehiculesGestion.forEach(v=>{
+    const actif=String(v.Actif||"").toUpperCase()==="OUI";
+    tbody.innerHTML+=`
+      <tr>
+        <td>${escapeHtml(v.Nom||"")}</td>
+        <td>${actif?"Oui":"Non"}</td>
+        <td style="font-size:11px">${escapeHtml(v.AgendaId||"")}</td>
+        <td>
+          ${actif
+            ? `<button class="danger small" onclick="desactiverVehiculeCourtoisie('${escapeJs(v.Nom||"")}')">Désactiver</button>`
+            : `<button class="green small" onclick="reactiverVehiculeCourtoisie('${escapeJs(v.Nom||"")}')">Réactiver</button>`
           }
         </td>
       </tr>`;
