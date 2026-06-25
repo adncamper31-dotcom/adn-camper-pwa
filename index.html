@@ -70,9 +70,8 @@ textarea{min-height:90px}
 .result-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin:8px 0}
 
 
-.absence-block{position:absolute;border-radius:12px;padding:9px;color:white;font-size:13px;font-weight:bold;box-shadow:0 4px 14px #0005;z-index:30;box-sizing:border-box;overflow:hidden;opacity:.94;cursor:pointer}
-.absence-block .smalltxt{font-size:12px;font-weight:normal;opacity:.95;margin-top:4px}
-.absence-warning{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:10px;margin:8px 0;font-weight:bold}
+.absence-block{position:absolute;border-radius:10px;padding:8px;font-size:13px;color:white;font-weight:bold;box-shadow:0 2px 8px #0004;z-index:2;box-sizing:border-box;opacity:.86;pointer-events:none;overflow:hidden}
+.absence-block small{display:block;font-weight:normal;opacity:.95;margin-top:3px}
 
 @media(max-width:700px){
   .agenda{grid-template-columns:60px repeat(6,145px);min-width:930px}
@@ -85,7 +84,7 @@ textarea{min-height:90px}
 
 <header>
   <h1>Planning ADN Camper V4.6</h1>
-  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences visibles • Blocage RDV absents • Salariés • Recherche client</p>
+  <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences visibles • Blocage RDV absent • Salariés • Recherche client</p>
 </header>
 
 <div class="container">
@@ -96,6 +95,7 @@ textarea{min-height:90px}
     <button onclick="changerSemaine(7)">Semaine suivante →</button>
     <button class="secondary" onclick="ouvrirFormulaire()">+ Ajouter RDV</button>
     <button class="green" onclick="ouvrirCourtoisie()">🚗 Courtoisie</button>
+    <button class="green" onclick="ouvrirVehiculesCourtoisie()">🚙 Véhicules courtoisie</button>
     <button class="secondary" onclick="ouvrirAbsencesSalaries()">🏖️ Absences salariés</button>
     <button class="orange" onclick="ouvrirBilanAbsences()">📊 Bilan absences</button>
     <button class="gray" onclick="ouvrirSalaries()">👤 Salariés</button>
@@ -319,6 +319,38 @@ textarea{min-height:90px}
   </div>
 </div>
 
+
+<div id="modalVehiculesCourtoisie" class="modal">
+  <div class="modal-content">
+    <h2>🚙 Gestion des véhicules de courtoisie</h2>
+    <div class="info">
+      Ajoute, désactive ou réactive les véhicules de courtoisie sans toucher au code.
+      À l'ajout, un agenda Google nommé <b>ADN - Courtoisie NomDuVéhicule</b> est créé automatiquement.
+    </div>
+
+    <div class="formgrid">
+      <input id="vehCourtoisieNom" placeholder="Nom du véhicule, ex : Fiat 500, Berlingo, 208">
+    </div>
+
+    <div class="actions">
+      <button class="green" onclick="ajouterVehiculeCourtoisie()">➕ Ajouter véhicule</button>
+      <button onclick="fermerVehiculesCourtoisie()">Fermer</button>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Véhicule</th>
+          <th>Actif</th>
+          <th>Agenda Google</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="listeVehiculesCourtoisie"></tbody>
+    </table>
+  </div>
+</div>
+
 <div id="modalHistoriqueClient" class="modal">
   <div class="modal-content">
     <h2>🔎 Recherche / historique client</h2>
@@ -339,6 +371,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbyxITbrdJyGvjWeXWCWA_TF
 let interventions = [];
 let absencesSalaries = [];
 let salariesGestion = [];
+let vehiculesGestion = [];
 let dateBase = new Date();
 let rdvSelectionne = null;
 let modeEdition = false;
@@ -531,10 +564,12 @@ function chargerPlanning(){
 
       absencesSalaries = payload.absences || [];
       salariesGestion = payload.salaries || [];
+      vehiculesGestion = payload.vehiculesCourtoisieTous || payload.vehiculesCourtoisie || [];
 
       synchroniserSelectsV43();
       afficherAbsencesTable();
       afficherSalariesTable();
+      afficherVehiculesCourtoisieTable();
       afficher();
     }catch(e){
       alert("Erreur lecture planning : " + e);
@@ -604,7 +639,7 @@ function afficher(){
   });
 
   afficherCharge(dates);
-  setTimeout(()=>placerEvenements(dates),0);
+  setTimeout(()=>{ placerAbsences(dates); placerEvenements(dates); },0);
 }
 
 function rdvVisible(r){
@@ -724,6 +759,9 @@ function placerEvenements(dates){
 
     const ev=document.createElement("div");
     ev.className="event "+(r.technicien||"");
+    const techColor = getTechColor(r.technicien);
+    ev.style.background = lightenHex(techColor, 72);
+    ev.style.borderLeft = "5px solid " + techColor;
     ev.draggable=true;
     ev.ondragstart=e=>e.dataTransfer.setData("text/plain",String(r.id));
 
@@ -755,113 +793,6 @@ function placerEvenements(dates){
 
     agenda.appendChild(ev);
   });
-
-  placerAbsences(dates);
-}
-
-
-function placerAbsences(dates){
-  const agenda=document.getElementById("agenda");
-  if(!agenda || !absencesSalaries || absencesSalaries.length===0)return;
-
-  const cells=agenda.querySelectorAll(".day-cell");
-  const heuresSansFermeture=heures.filter(h=>h!=="12:00");
-  if(!cells.length || !heuresSansFermeture.length)return;
-
-  dates.forEach((dt,dayIndex)=>{
-    const absDuJour=absencesSalaries.filter(a=>dateDansPeriodeClient(dt,a.DateDebut,a.DateFin));
-    if(absDuJour.length===0)return;
-
-    const firstCell=cells[0*6+dayIndex];
-    const lastCell=cells[(heuresSansFermeture.length-1)*6+dayIndex];
-    if(!firstCell||!lastCell)return;
-
-    const rectA=agenda.getBoundingClientRect();
-    const rectF=firstCell.getBoundingClientRect();
-    const rectL=lastCell.getBoundingClientRect();
-
-    const largeur=Math.max(50,(rectF.width-6)/absDuJour.length);
-    const hauteur=Math.max(48,(rectL.bottom-rectF.top)-4);
-
-    absDuJour.forEach((a,index)=>{
-      const techColor=getCouleurTechnicien(a.Salarie);
-      const bg=darkenColor(techColor,0.40);
-      const border=darkenColor(techColor,0.60);
-
-      const bloc=document.createElement("div");
-      bloc.className="absence-block";
-      bloc.style.top=(rectF.top-rectA.top+agenda.scrollTop+2)+"px";
-      bloc.style.left=(rectF.left-rectA.left+agenda.scrollLeft+3+(index*largeur))+"px";
-      bloc.style.width=Math.max(48,largeur-5)+"px";
-      bloc.style.height=hauteur+"px";
-      bloc.style.background=bg;
-      bloc.style.borderLeft="6px solid "+border;
-      bloc.title=(a.Salarie||"")+" - "+(a.Type||"Absence")+"\nDu "+(a.DateDebut||"")+" au "+(a.DateFin||"")+(a.Commentaire?"\n"+a.Commentaire:"");
-
-      bloc.innerHTML=`
-        🏖️ ${escapeHtml(a.Salarie||"")}<br>
-        <span class="smalltxt">${escapeHtml(a.Type||"Absence")}</span><br>
-        <span class="smalltxt">${escapeHtml(a.Commentaire||"")}</span>
-      `;
-
-      agenda.appendChild(bloc);
-    });
-  });
-}
-
-function verifierAbsencePourRdv(item){
-  if(!item || !item.technicien || !item.date)return null;
-
-  const rdvTemp={
-    id:item.id || "TMP",
-    date:item.date,
-    heure:item.heure || "08:30",
-    duree:Number(item.duree||1)
-  };
-
-  const segments=genererSegments(rdvTemp);
-
-  for(let i=0;i<segments.length;i++){
-    const seg=segments[i];
-    const absence=(absencesSalaries||[]).find(a=>
-      String(a.Salarie)===String(item.technicien) && dateDansPeriodeClient(seg.date,a.DateDebut,a.DateFin)
-    );
-    if(absence){
-      return Object.assign({date:seg.date}, absence);
-    }
-  }
-  return null;
-}
-
-function dateDansPeriodeClient(dateIso,debutIso,finIso){
-  const d=dateObj(normaliserDate(dateIso));
-  const deb=dateObj(normaliserDate(debutIso));
-  const fin=dateObj(normaliserDate(finIso||debutIso));
-  return d>=deb && d<=fin;
-}
-
-function getCouleurTechnicien(nom){
-  const s=(salariesGestion||[]).find(x=>String(x.Nom)===String(nom));
-  if(s && s.Couleur)return s.Couleur;
-  if(nom==="Maxime")return "#2563eb";
-  if(nom==="Joël")return "#16a34a";
-  if(nom==="Guillaume")return "#f97316";
-  if(nom==="Gaël")return "#dc2626";
-  return "#6b7280";
-}
-
-function darkenColor(hex,amount){
-  let c=String(hex||"#6b7280").replace("#","");
-  if(c.length===3)c=c.split("").map(x=>x+x).join("");
-  const num=parseInt(c,16);
-  if(isNaN(num))return "#374151";
-  let r=(num>>16)&255;
-  let g=(num>>8)&255;
-  let b=num&255;
-  r=Math.max(0,Math.round(r*(1-amount)));
-  g=Math.max(0,Math.round(g*(1-amount)));
-  b=Math.max(0,Math.round(b*(1-amount)));
-  return "#"+[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("");
 }
 
 function afficherCharge(dates){
@@ -870,13 +801,15 @@ function afficherCharge(dates){
 
   box.innerHTML="";
 
-  const actifs=(salariesGestion||[]).filter(s=>String(s.Actif||"").toUpperCase()==="OUI");
-  const noms=actifs.length?actifs.map(s=>s.Nom):techniciens;
+  const actifs = (salariesGestion || []).filter(s => String(s.Actif || "").toUpperCase() === "OUI");
+  const noms = actifs.length ? actifs.map(s => s.Nom) : techniciens;
 
   noms.forEach(t=>{
-    const absence=(absencesSalaries||[]).find(a=>String(a.Salarie)===String(t)&&dateDansPeriodeClient(auj,a.DateDebut,a.DateFin));
+    const absence = trouverAbsenceSalarieJour(t, auj);
+
     if(absence){
-      box.innerHTML+=`<div class="chargebox full">${t} : absent (${escapeHtml(absence.Type||"Absence")})</div>`;
+      const color = darkenHex(getTechColor(t), 35);
+      box.innerHTML += `<div class="chargebox full" style="background:${color};color:white">${t} : absent (${absence.Type || "Absence"})</div>`;
       return;
     }
 
@@ -986,33 +919,26 @@ function ajouter(){
     return;
   }
 
-  const absence = verifierAbsencePourRdv(item);
-  if(absence){
-    alert("Impossible : " + item.technicien + " est absent le " + absence.date + ".
-Type : " + (absence.Type || "Absence") + (absence.Commentaire ? "
-Commentaire : " + absence.Commentaire : ""));
-    return;
-  }
+  if(!verifierAbsenceAvantRDV(item)) return;
 
-  apiPost({
-    ID:item.id,
-    Civilite:item.civilite,
-    Date:item.date,
-    Heure:item.heure,
-    Client:item.client,
-    "Véhicule":item.vehicule,
-    "Téléphone":item.telephone,
-    Travaux:item.travaux,
-    Technicien:item.technicien,
-    "Durée":item.duree,
-    Courtoisie:item.courtoisie,
-    Statut:item.statut
+  fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      ID:item.id,
+      Civilite:item.civilite,
+      Date:item.date,
+      Heure:item.heure,
+      Client:item.client,
+      "Véhicule":item.vehicule,
+      "Téléphone":item.telephone,
+      Travaux:item.travaux,
+      Technicien:item.technicien,
+      "Durée":item.duree,
+      Courtoisie:item.courtoisie,
+      Statut:item.statut
+    })
   })
-  .then(res=>{
-    if(res && res.ok === false){
-      alert(res.error || "Enregistrement refusé.");
-      return;
-    }
+  .then(()=>{
     fermerFormulaire();
     setTimeout(chargerPlanning,800);
   })
@@ -1027,35 +953,28 @@ function modifierRDV(){
     return;
   }
 
-  const absence = verifierAbsencePourRdv(item);
-  if(absence){
-    alert("Impossible : " + item.technicien + " est absent le " + absence.date + ".
-Type : " + (absence.Type || "Absence") + (absence.Commentaire ? "
-Commentaire : " + absence.Commentaire : ""));
-    return;
-  }
+  if(!verifierAbsenceAvantRDV(item)) return;
 
-  apiPost({
-    action:"update",
-    OldID:editionId,
-    ID:item.id,
-    Civilite:item.civilite,
-    Date:item.date,
-    Heure:item.heure,
-    Client:item.client,
-    "Véhicule":item.vehicule,
-    "Téléphone":item.telephone,
-    Travaux:item.travaux,
-    Technicien:item.technicien,
-    "Durée":item.duree,
-    Courtoisie:item.courtoisie,
-    Statut:item.statut
+  fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      action:"update",
+      OldID:editionId,
+      ID:item.id,
+      Civilite:item.civilite,
+      Date:item.date,
+      Heure:item.heure,
+      Client:item.client,
+      "Véhicule":item.vehicule,
+      "Téléphone":item.telephone,
+      Travaux:item.travaux,
+      Technicien:item.technicien,
+      "Durée":item.duree,
+      Courtoisie:item.courtoisie,
+      Statut:item.statut
+    })
   })
-  .then(res=>{
-    if(res && res.ok === false){
-      alert(res.error || "Modification refusée.");
-      return;
-    }
+  .then(()=>{
     fermerFormulaire();
     fermerDetail();
     setTimeout(chargerPlanning,800);
@@ -1221,6 +1140,28 @@ function synchroniserSelectsV43(){
       tech.appendChild(o);
     });
     tech.value = oldTech;
+  }
+
+  const vehiculesActifs = (vehiculesGestion || [])
+    .filter(v => String(v.Actif || "").toUpperCase() === "OUI")
+    .map(v => v.Nom);
+
+  if(vehiculesActifs.length){
+    vehiculesCourtoisie.splice(0, vehiculesCourtoisie.length);
+    vehiculesActifs.forEach(v => vehiculesCourtoisie.push(v));
+  }
+
+  const courtoisieSelect = document.getElementById("courtoisie");
+  if(courtoisieSelect){
+    const oldCourtoisie = courtoisieSelect.value || "Aucun";
+    courtoisieSelect.innerHTML = '<option>Aucun</option>';
+    vehiculesCourtoisie.forEach(v=>{
+      const o=document.createElement("option");
+      o.value=v;
+      o.textContent=v;
+      courtoisieSelect.appendChild(o);
+    });
+    courtoisieSelect.value = oldCourtoisie;
   }
 }
 
@@ -1408,6 +1349,7 @@ function calculerBilanAbsences(){
 
 function ouvrirSalaries(){
   afficherSalariesTable();
+      afficherVehiculesCourtoisieTable();
   modalSalaries.style.display = "flex";
 }
 
@@ -1585,6 +1527,208 @@ function escapeHtml(str){
 
 function escapeJs(str){
   return String(str || "").replace(/\\/g,"\\\\").replace(/'/g,"\\'");
+}
+
+
+
+function dateDansPeriodeJS(dateIso, debutIso, finIso){
+  if(!dateIso || !debutIso) return false;
+  const d = dateObj(normaliserDate(dateIso));
+  const deb = dateObj(normaliserDate(debutIso));
+  const fin = dateObj(normaliserDate(finIso || debutIso));
+  return d >= deb && d <= fin;
+}
+
+function trouverAbsenceSalarieJour(salarie, dateIso){
+  return (absencesSalaries || []).find(a =>
+    String(a.Salarie || "") === String(salarie || "") &&
+    String(a.Statut || "Actif").toLowerCase() !== "supprimé" &&
+    dateDansPeriodeJS(dateIso, a.DateDebut, a.DateFin)
+  );
+}
+
+function verifierAbsenceAvantRDV(item){
+  const absence = trouverAbsenceSalarieJour(item.technicien, item.date);
+
+  if(absence){
+    alert(
+      "Impossible : " + item.technicien + " est absent ce jour-là.\n\n" +
+      "Type : " + (absence.Type || "Absence") +
+      (absence.Commentaire ? "\nCommentaire : " + absence.Commentaire : "")
+    );
+    return false;
+  }
+
+  return true;
+}
+
+function getTechColor(nom){
+  const s = (salariesGestion || []).find(x => String(x.Nom || "") === String(nom || ""));
+  if(s && s.Couleur) return s.Couleur;
+
+  const colors = {
+    "Maxime":"#2563eb",
+    "Joël":"#16a34a",
+    "Guillaume":"#f97316",
+    "Gaël":"#dc2626"
+  };
+
+  return colors[nom] || "#6b7280";
+}
+
+function hexToRgb(hex){
+  let h = String(hex || "#6b7280").replace("#","");
+  if(h.length === 3) h = h.split("").map(x=>x+x).join("");
+  const n = parseInt(h,16);
+  return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+
+function rgbToHex(r,g,b){
+  return "#" + [r,g,b].map(x=>Math.max(0,Math.min(255,Math.round(x))).toString(16).padStart(2,"0")).join("");
+}
+
+function darkenHex(hex, amount){
+  const c = hexToRgb(hex);
+  return rgbToHex(c.r - amount, c.g - amount, c.b - amount);
+}
+
+function lightenHex(hex, percent){
+  const c = hexToRgb(hex);
+  const p = Math.max(0, Math.min(100, percent)) / 100;
+  return rgbToHex(c.r + (255 - c.r) * p, c.g + (255 - c.g) * p, c.b + (255 - c.b) * p);
+}
+
+function placerAbsences(dates){
+  const agenda=document.getElementById("agenda");
+  const cells=agenda.querySelectorAll(".day-cell");
+  const heuresSansFermeture = heures.filter(h=>h!=="12:00");
+  const filtre = document.getElementById("filtreTech").value;
+
+  if(!cells.length) return;
+
+  (absencesSalaries || []).forEach(abs=>{
+    if(String(abs.Statut || "Actif").toLowerCase() === "supprimé") return;
+    if(filtre === "Courtoisie") return;
+    if(filtre !== "Tous" && String(abs.Salarie || "") !== filtre) return;
+
+    dates.forEach((dt,dayIndex)=>{
+      if(!dateDansPeriodeJS(dt, abs.DateDebut, abs.DateFin)) return;
+
+      const firstCell = cells[0*6 + dayIndex];
+      const lastCell = cells[(heuresSansFermeture.length-1)*6 + dayIndex];
+      if(!firstCell || !lastCell) return;
+
+      const rectA=agenda.getBoundingClientRect();
+      const rectFirst=firstCell.getBoundingClientRect();
+      const rectLast=lastCell.getBoundingClientRect();
+
+      const couleur = darkenHex(getTechColor(abs.Salarie), 45);
+      const bloc=document.createElement("div");
+      bloc.className="absence-block";
+      bloc.style.background=couleur;
+      bloc.style.top=(rectFirst.top-rectA.top+agenda.scrollTop+2)+"px";
+      bloc.style.left=(rectFirst.left-rectA.left+agenda.scrollLeft+2)+"px";
+      bloc.style.width=Math.max(80, rectFirst.width-4)+"px";
+      bloc.style.height=Math.max(48, rectLast.bottom-rectFirst.top-4)+"px";
+
+      bloc.innerHTML = `🚫 ${escapeHtml(abs.Salarie || "")} absent<small>${escapeHtml(abs.Type || "Absence")}${abs.Commentaire ? " - " + escapeHtml(abs.Commentaire) : ""}</small>`;
+      agenda.appendChild(bloc);
+    });
+  });
+}
+
+function ouvrirVehiculesCourtoisie(){
+  afficherVehiculesCourtoisieTable();
+  modalVehiculesCourtoisie.style.display = "flex";
+}
+
+function fermerVehiculesCourtoisie(){
+  modalVehiculesCourtoisie.style.display = "none";
+}
+
+function ajouterVehiculeCourtoisie(){
+  const nom = vehCourtoisieNom.value.trim();
+  if(!nom){
+    alert("Nom du véhicule obligatoire.");
+    return;
+  }
+
+  apiPost({
+    action:"add_courtesy_vehicle",
+    Nom:nom
+  }).then(res=>{
+    if(res && res.ok === false){
+      alert(res.error || "Impossible d'ajouter le véhicule.");
+      return;
+    }
+
+    vehCourtoisieNom.value = "";
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>{
+    alert("Erreur lors de l'ajout du véhicule.");
+  });
+}
+
+function desactiverVehiculeCourtoisie(nom){
+  if(!confirm("Désactiver le véhicule de courtoisie " + nom + " ? L'historique sera conservé.")) return;
+
+  apiPost({
+    action:"delete_courtesy_vehicle",
+    Nom:nom
+  }).then(res=>{
+    if(res && res.ok === false){
+      alert(res.error || "Impossible de désactiver le véhicule.");
+      return;
+    }
+
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>{
+    alert("Erreur lors de la désactivation du véhicule.");
+  });
+}
+
+function reactiverVehiculeCourtoisie(nom){
+  apiPost({
+    action:"reactivate_courtesy_vehicle",
+    Nom:nom
+  }).then(res=>{
+    if(res && res.ok === false){
+      alert(res.error || "Impossible de réactiver le véhicule.");
+      return;
+    }
+
+    setTimeout(chargerPlanning,800);
+  }).catch(()=>{
+    alert("Erreur lors de la réactivation du véhicule.");
+  });
+}
+
+function afficherVehiculesCourtoisieTable(){
+  const tbody = document.getElementById("listeVehiculesCourtoisie");
+  if(!tbody) return;
+
+  tbody.innerHTML = "";
+
+  if(!vehiculesGestion || vehiculesGestion.length === 0){
+    tbody.innerHTML = '<tr><td colspan="4">Aucun véhicule trouvé.</td></tr>';
+    return;
+  }
+
+  vehiculesGestion.forEach(v=>{
+    const actif = String(v.Actif || "").toUpperCase() === "OUI";
+    tbody.innerHTML += `
+      <tr>
+        <td>${escapeHtml(v.Nom || "")}</td>
+        <td>${actif ? "Oui" : "Non"}</td>
+        <td style="font-size:11px">${escapeHtml(v.AgendaId || "")}</td>
+        <td>
+          ${actif
+            ? `<button class="danger small" onclick="desactiverVehiculeCourtoisie('${escapeJs(v.Nom || "")}')">Désactiver</button>`
+            : `<button class="green small" onclick="reactiverVehiculeCourtoisie('${escapeJs(v.Nom || "")}')">Réactiver</button>`
+          }
+        </td>
+      </tr>`;
+  });
 }
 
 
@@ -1776,6 +1920,8 @@ function fermerCourtoisie(){
 }
 
 function chargeJour(tech,jour){
+  if(trouverAbsenceSalarieJour(tech, jour)) return 0;
+
   let total = 0;
 
   interventions
