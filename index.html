@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper V4.6</title>
+<title>Planning ADN Camper V4.7</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -83,7 +83,7 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper V4.6</h1>
+  <h1>Planning ADN Camper V4.7</h1>
   <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences visibles • Blocage RDV absent • Salariés • Recherche client</p>
 </header>
 
@@ -111,6 +111,8 @@ textarea{min-height:90px}
     </select>
 
     <strong id="titreSemaine"></strong>
+    <span id="etatConnexion" class="badge" style="background:#fef3c7;color:#92400e">Connexion…</span>
+    <button id="btnReconnecter" class="small secondary" onclick="chargerPlanning(true)" style="display:none">Reconnecter</button>
   </div>
 
   <div class="card legend">
@@ -537,12 +539,57 @@ function genererSegments(rdv){
   return segments;
 }
 
-function chargerPlanning(){
-  const callbackName = "callbackPlanning_" + Date.now();
+function setEtatConnexion(texte, ok, montrerBouton){
+  const el=document.getElementById("etatConnexion");
+  const btn=document.getElementById("btnReconnecter");
+  if(el){
+    el.textContent=texte;
+    el.style.background=ok===true?"#dcfce7":ok===false?"#fee2e2":"#fef3c7";
+    el.style.color=ok===true?"#166534":ok===false?"#991b1b":"#92400e";
+  }
+  if(btn) btn.style.display=montrerBouton?"inline-block":"none";
+}
+
+function chargerPlanning(force){
+  setEtatConnexion("Connexion…", null, false);
+  chargerPlanningTentative(1);
+}
+
+function chargerPlanningTentative(tentative){
+  const callbackName = "callbackPlanning_" + Date.now() + "_" + tentative;
+  let termine=false;
+
+  const nettoyer=function(){
+    const oldScript=document.getElementById(callbackName);
+    if(oldScript) oldScript.remove();
+    try{ delete window[callbackName]; }catch(e){ window[callbackName]=undefined; }
+  };
+
+  const echouer=function(){
+    if(termine) return;
+    termine=true;
+    nettoyer();
+    if(tentative < 3){
+      setEtatConnexion("Reconnexion " + (tentative+1) + "/3…", null, false);
+      setTimeout(function(){ chargerPlanningTentative(tentative+1); }, 900);
+    }else{
+      setEtatConnexion("Connexion impossible", false, true);
+      // On conserve volontairement les dernières données affichées.
+    }
+  };
 
   window[callbackName] = function(data){
+    if(termine) return;
+    termine=true;
+    clearTimeout(timeoutId);
     try{
-      const payload = Array.isArray(data) ? { interventions: data } : data;
+      let payload = data;
+      // Tolère aussi une réponse encapsulée sous forme de chaîne JSON.
+      if(typeof payload === "string"){
+        try{ payload=JSON.parse(payload); }catch(e){}
+      }
+      if(Array.isArray(payload)) payload={interventions:payload};
+      if(!payload || typeof payload !== "object") throw new Error("Réponse API invalide");
 
       interventions=(payload.interventions || []).map(x=>({
         id:x.ID,
@@ -566,31 +613,37 @@ function chargerPlanning(){
       salariesGestion = payload.salaries || [];
       vehiculesGestion = payload.vehiculesCourtoisieTous || payload.vehiculesCourtoisie || [];
 
+      try{
+        localStorage.setItem("adnPlanningCache", JSON.stringify({
+          interventions:payload.interventions || [],
+          absences:absencesSalaries,
+          salaries:salariesGestion,
+          vehiculesCourtoisieTous:vehiculesGestion,
+          savedAt:Date.now()
+        }));
+      }catch(e){}
+
       synchroniserSelectsV43();
       afficherAbsencesTable();
       afficherSalariesTable();
       afficherVehiculesCourtoisieTable();
       afficher();
+      setEtatConnexion("Connecté", true, false);
     }catch(e){
-      alert("Erreur lecture planning : " + e);
+      console.error("Erreur lecture planning",e);
+      setEtatConnexion("Erreur de lecture", false, true);
     }
-
-    delete window[callbackName];
-
-    const oldScript = document.getElementById(callbackName);
-    if(oldScript) oldScript.remove();
+    nettoyer();
   };
 
   const script = document.createElement("script");
   script.id = callbackName;
-  script.src = API_URL + "?callback=" + callbackName + "&t=" + Date.now();
-
-  script.onerror = function(){
-    alert("Impossible de charger le planning Google Sheets.");
-    delete window[callbackName];
-  };
-
+  script.async = true;
+  script.src = API_URL + "?callback=" + encodeURIComponent(callbackName) + "&t=" + Date.now();
+  script.onerror = echouer;
   document.body.appendChild(script);
+
+  const timeoutId=setTimeout(echouer,12000);
 }
 
 function afficher(){
