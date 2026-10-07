@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper V4.7.2</title>
+<title>Planning ADN Camper V4.7.3</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -83,7 +83,7 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper V4.7.2</h1>
+  <h1>Planning ADN Camper V4.7.3</h1>
   <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences visibles • Blocage RDV absent • Salariés • Recherche client</p>
 </header>
 
@@ -557,14 +557,21 @@ function chargerPlanning(force){
   const ancien=document.getElementById("adnPlanningJsonp");
   if(ancien) ancien.remove();
 
+  // Callback unique à chaque chargement : évite les collisions et force
+  // un nouvel appel Apps Script dès l'ouverture du planning.
+  const callbackName="callbackPlanning_"+Date.now();
   let termine=false;
-  const callbackName="test123";
+
+  const nettoyer=function(){
+    const sc=document.getElementById("adnPlanningJsonp");
+    if(sc) sc.remove();
+    try{ delete window[callbackName]; }catch(e){ window[callbackName]=undefined; }
+  };
 
   const timeoutId=setTimeout(function(){
     if(termine) return;
     termine=true;
-    const sc=document.getElementById("adnPlanningJsonp");
-    if(sc) sc.remove();
+    nettoyer();
     setEtatConnexion("Connexion impossible", false, true);
     console.error("ADN Planning : délai dépassé lors du chargement Apps Script.");
   },15000);
@@ -620,29 +627,31 @@ function chargerPlanning(force){
       afficherVehiculesCourtoisieTable();
       afficher();
       setEtatConnexion("Connecté",true,false);
-      console.log("ADN Planning : connexion Apps Script OK.");
+      console.log("ADN Planning : connexion automatique Apps Script OK.");
     }catch(e){
       console.error("ADN Planning : erreur de lecture",e);
       setEtatConnexion("Erreur de lecture",false,true);
     }
 
-    const sc=document.getElementById("adnPlanningJsonp");
-    if(sc) sc.remove();
+    nettoyer();
   };
 
-  // Utilise exactement le callback validé manuellement dans Chrome : ?callback=test123
   const script=document.createElement("script");
   script.id="adnPlanningJsonp";
   script.async=true;
-  script.src=API_URL + "?callback=" + callbackName;
+  script.src=API_URL
+    + "?callback=" + encodeURIComponent(callbackName)
+    + "&t=" + Date.now();
+
   script.onerror=function(ev){
     if(termine) return;
     termine=true;
     clearTimeout(timeoutId);
     console.error("ADN Planning : erreur de chargement Apps Script", script.src, ev);
+    nettoyer();
     setEtatConnexion("Connexion impossible",false,true);
-    script.remove();
   };
+
   document.body.appendChild(script);
 }
 
@@ -2001,8 +2010,11 @@ function aujourdhui(){
   afficher();
 }
 
-if("serviceWorker"in navigator){
-  navigator.serviceWorker.register("service-worker.js");
+// V4.7.3 : pas de Service Worker pour le planning atelier.
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.getRegistrations().then(function(registrations){
+    registrations.forEach(function(registration){ registration.unregister(); });
+  }).catch(function(){});
 }
 
 window.addEventListener("resize",()=>afficher());
