@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper V4.7</title>
+<title>Planning ADN Camper V4.7.1</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -83,7 +83,7 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper V4.7</h1>
+  <h1>Planning ADN Camper V4.7.1</h1>
   <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences visibles • Blocage RDV absent • Salariés • Recherche client</p>
 </header>
 
@@ -552,39 +552,30 @@ function setEtatConnexion(texte, ok, montrerBouton){
 
 function chargerPlanning(force){
   setEtatConnexion("Connexion…", null, false);
-  chargerPlanningTentative(1);
-}
 
-function chargerPlanningTentative(tentative){
-  const callbackName = "callbackPlanning_" + Date.now() + "_" + tentative;
+  // Nettoyage d'un éventuel ancien appel JSONP.
+  const ancien=document.getElementById("adnPlanningJsonp");
+  if(ancien) ancien.remove();
+
   let termine=false;
+  const callbackName="adnPlanningCallback";
 
-  const nettoyer=function(){
-    const oldScript=document.getElementById(callbackName);
-    if(oldScript) oldScript.remove();
-    try{ delete window[callbackName]; }catch(e){ window[callbackName]=undefined; }
-  };
-
-  const echouer=function(){
+  const timeoutId=setTimeout(function(){
     if(termine) return;
     termine=true;
-    nettoyer();
-    if(tentative < 3){
-      setEtatConnexion("Reconnexion " + (tentative+1) + "/3…", null, false);
-      setTimeout(function(){ chargerPlanningTentative(tentative+1); }, 900);
-    }else{
-      setEtatConnexion("Connexion impossible", false, true);
-      // On conserve volontairement les dernières données affichées.
-    }
-  };
+    const sc=document.getElementById("adnPlanningJsonp");
+    if(sc) sc.remove();
+    setEtatConnexion("Connexion impossible", false, true);
+    console.error("ADN Planning : délai dépassé lors du chargement Apps Script.");
+  },15000);
 
-  window[callbackName] = function(data){
+  window[callbackName]=function(data){
     if(termine) return;
     termine=true;
     clearTimeout(timeoutId);
+
     try{
-      let payload = data;
-      // Tolère aussi une réponse encapsulée sous forme de chaîne JSON.
+      let payload=data;
       if(typeof payload === "string"){
         try{ payload=JSON.parse(payload); }catch(e){}
       }
@@ -609,12 +600,12 @@ function chargerPlanningTentative(tentative){
         smsPret:x.SmsPret || ""
       })).filter(x=>x.date&&x.heure);
 
-      absencesSalaries = payload.absences || [];
-      salariesGestion = payload.salaries || [];
-      vehiculesGestion = payload.vehiculesCourtoisieTous || payload.vehiculesCourtoisie || [];
+      absencesSalaries=payload.absences || [];
+      salariesGestion=payload.salaries || [];
+      vehiculesGestion=payload.vehiculesCourtoisieTous || payload.vehiculesCourtoisie || [];
 
       try{
-        localStorage.setItem("adnPlanningCache", JSON.stringify({
+        localStorage.setItem("adnPlanningCache",JSON.stringify({
           interventions:payload.interventions || [],
           absences:absencesSalaries,
           salaries:salariesGestion,
@@ -628,22 +619,31 @@ function chargerPlanningTentative(tentative){
       afficherSalariesTable();
       afficherVehiculesCourtoisieTable();
       afficher();
-      setEtatConnexion("Connecté", true, false);
+      setEtatConnexion("Connecté",true,false);
+      console.log("ADN Planning : connexion Apps Script OK.");
     }catch(e){
-      console.error("Erreur lecture planning",e);
-      setEtatConnexion("Erreur de lecture", false, true);
+      console.error("ADN Planning : erreur de lecture",e);
+      setEtatConnexion("Erreur de lecture",false,true);
     }
-    nettoyer();
+
+    const sc=document.getElementById("adnPlanningJsonp");
+    if(sc) sc.remove();
   };
 
-  const script = document.createElement("script");
-  script.id = callbackName;
-  script.async = true;
-  script.src = API_URL + "?callback=" + encodeURIComponent(callbackName) + "&t=" + Date.now();
-  script.onerror = echouer;
+  // Même forme que le test manuel qui fonctionne dans Chrome : ?callback=test123
+  const script=document.createElement("script");
+  script.id="adnPlanningJsonp";
+  script.async=true;
+  script.src=API_URL + "?callback=" + callbackName;
+  script.onerror=function(ev){
+    if(termine) return;
+    termine=true;
+    clearTimeout(timeoutId);
+    console.error("ADN Planning : erreur de chargement Apps Script", script.src, ev);
+    setEtatConnexion("Connexion impossible",false,true);
+    script.remove();
+  };
   document.body.appendChild(script);
-
-  const timeoutId=setTimeout(echouer,12000);
 }
 
 function afficher(){
