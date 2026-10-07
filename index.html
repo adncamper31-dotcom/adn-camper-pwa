@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper V4.7.3</title>
+<title>Planning ADN Camper V4.7.4</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -83,7 +83,7 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper V4.7.3</h1>
+  <h1>Planning ADN Camper V4.7.4</h1>
   <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences visibles • Blocage RDV absent • Salariés • Recherche client</p>
 </header>
 
@@ -553,106 +553,65 @@ function setEtatConnexion(texte, ok, montrerBouton){
 function chargerPlanning(force){
   setEtatConnexion("Connexion…", null, false);
 
-  // Nettoyage d'un éventuel ancien appel JSONP.
-  const ancien=document.getElementById("adnPlanningJsonp");
-  if(ancien) ancien.remove();
+  const url = API_URL + "?t=" + Date.now();
 
-  // Callback unique à chaque chargement : évite les collisions et force
-  // un nouvel appel Apps Script dès l'ouverture du planning.
-  const callbackName="callbackPlanning_"+Date.now();
-  let termine=false;
+  fetch(url, {
+    method:"GET",
+    cache:"no-store",
+    redirect:"follow"
+  })
+  .then(function(response){
+    if(!response.ok) throw new Error("HTTP " + response.status);
+    return response.json();
+  })
+  .then(function(payload){
+    if(Array.isArray(payload)) payload={interventions:payload};
+    if(!payload || typeof payload !== "object") throw new Error("Réponse API invalide");
 
-  const nettoyer=function(){
-    const sc=document.getElementById("adnPlanningJsonp");
-    if(sc) sc.remove();
-    try{ delete window[callbackName]; }catch(e){ window[callbackName]=undefined; }
-  };
+    interventions=(payload.interventions || []).map(x=>({
+      id:x.ID,
+      date:normaliserDate(x.Date),
+      heure:normaliserHeure(x.Heure),
+      client:x.Client,
+      vehicule:x["Véhicule"],
+      telephone:formaterTelephoneSMS(x["Téléphone"]),
+      travaux:x.Travaux,
+      technicien:x.Technicien,
+      duree:Number(String(x["Durée"]).replace(",","."))||1,
+      courtoisie:x.Courtoisie,
+      statut:x.Statut,
+      civilite:x.Civilite || x["Civilité"] || "",
+      smsConfirmation:x.SmsConfirmation || "",
+      smsRappel:x.SmsRappel || "",
+      smsPret:x.SmsPret || ""
+    })).filter(x=>x.date&&x.heure);
 
-  const timeoutId=setTimeout(function(){
-    if(termine) return;
-    termine=true;
-    nettoyer();
-    setEtatConnexion("Connexion impossible", false, true);
-    console.error("ADN Planning : délai dépassé lors du chargement Apps Script.");
-  },15000);
-
-  window[callbackName]=function(data){
-    if(termine) return;
-    termine=true;
-    clearTimeout(timeoutId);
+    absencesSalaries=payload.absences || [];
+    salariesGestion=payload.salaries || [];
+    vehiculesGestion=payload.vehiculesCourtoisieTous || payload.vehiculesCourtoisie || [];
 
     try{
-      let payload=data;
-      if(typeof payload === "string"){
-        try{ payload=JSON.parse(payload); }catch(e){}
-      }
-      if(Array.isArray(payload)) payload={interventions:payload};
-      if(!payload || typeof payload !== "object") throw new Error("Réponse API invalide");
+      localStorage.setItem("adnPlanningCache",JSON.stringify({
+        interventions:payload.interventions || [],
+        absences:absencesSalaries,
+        salaries:salariesGestion,
+        vehiculesCourtoisieTous:vehiculesGestion,
+        savedAt:Date.now()
+      }));
+    }catch(e){}
 
-      interventions=(payload.interventions || []).map(x=>({
-        id:x.ID,
-        date:normaliserDate(x.Date),
-        heure:normaliserHeure(x.Heure),
-        client:x.Client,
-        vehicule:x["Véhicule"],
-        telephone:formaterTelephoneSMS(x["Téléphone"]),
-        travaux:x.Travaux,
-        technicien:x.Technicien,
-        duree:Number(String(x["Durée"]).replace(",","."))||1,
-        courtoisie:x.Courtoisie,
-        statut:x.Statut,
-        civilite:x.Civilite || x["Civilité"] || "",
-        smsConfirmation:x.SmsConfirmation || "",
-        smsRappel:x.SmsRappel || "",
-        smsPret:x.SmsPret || ""
-      })).filter(x=>x.date&&x.heure);
-
-      absencesSalaries=payload.absences || [];
-      salariesGestion=payload.salaries || [];
-      vehiculesGestion=payload.vehiculesCourtoisieTous || payload.vehiculesCourtoisie || [];
-
-      try{
-        localStorage.setItem("adnPlanningCache",JSON.stringify({
-          interventions:payload.interventions || [],
-          absences:absencesSalaries,
-          salaries:salariesGestion,
-          vehiculesCourtoisieTous:vehiculesGestion,
-          savedAt:Date.now()
-        }));
-      }catch(e){}
-
-      synchroniserSelectsV43();
-      afficherAbsencesTable();
-      afficherSalariesTable();
-      afficherVehiculesCourtoisieTable();
-      afficher();
-      setEtatConnexion("Connecté",true,false);
-      console.log("ADN Planning : connexion automatique Apps Script OK.");
-    }catch(e){
-      console.error("ADN Planning : erreur de lecture",e);
-      setEtatConnexion("Erreur de lecture",false,true);
-    }
-
-    nettoyer();
-  };
-
-  const script=document.createElement("script");
-  script.id="adnPlanningJsonp";
-  script.async=true;
-  script.src=API_URL
-    + "?callback=" + encodeURIComponent(callbackName)
-    + "&t=" + Date.now();
-
-  script.onerror=function(ev){
-    if(termine) return;
-    termine=true;
-    clearTimeout(timeoutId);
-    console.error("ADN Planning : erreur de chargement Apps Script", script.src, ev);
-    nettoyer();
+    synchroniserSelectsV43();
+    afficherAbsencesTable();
+    afficherSalariesTable();
+    afficherVehiculesCourtoisieTable();
+    afficher();
+    setEtatConnexion("Connecté",true,false);
+    console.log("ADN Planning : connexion directe Apps Script OK.");
+  })
+  .catch(function(err){
+    console.error("ADN Planning : erreur connexion directe Apps Script",err);
     setEtatConnexion("Connexion impossible",false,true);
-  };
-
-  document.body.appendChild(script);
+  });
 }
 
 function afficher(){
