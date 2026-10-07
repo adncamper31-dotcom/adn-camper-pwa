@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Planning ADN Camper V4.7.1</title>
+<title>Planning ADN Camper V4.7.2</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#111827">
 
@@ -83,7 +83,7 @@ textarea{min-height:90px}
 <body>
 
 <header>
-  <h1>Planning ADN Camper V4.7.1</h1>
+  <h1>Planning ADN Camper V4.7.2</h1>
   <p>Vue semaine atelier • SMS client • Pause 12h-14h • Absences visibles • Blocage RDV absent • Salariés • Recherche client</p>
 </header>
 
@@ -558,7 +558,7 @@ function chargerPlanning(force){
   if(ancien) ancien.remove();
 
   let termine=false;
-  const callbackName="adnPlanningCallback";
+  const callbackName="test123";
 
   const timeoutId=setTimeout(function(){
     if(termine) return;
@@ -630,7 +630,7 @@ function chargerPlanning(force){
     if(sc) sc.remove();
   };
 
-  // Même forme que le test manuel qui fonctionne dans Chrome : ?callback=test123
+  // Utilise exactement le callback validé manuellement dans Chrome : ?callback=test123
   const script=document.createElement("script");
   script.id="adnPlanningJsonp";
   script.async=true;
